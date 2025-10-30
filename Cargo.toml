@@ -1,0 +1,104 @@
+[package]
+name = "dervflow"
+version = "0.1.0"
+edition = "2024"
+authors = ["Soumyadip Sarkar"]
+description = "High-performance mathematics & quantitative finance library"
+license = "Apache-2.0"
+repository = "https://github.com/neuralsorcerer/dervflow"
+readme = "README.md"
+keywords = ["quantitative-finance", "options", "derivatives", "portfolio", "risk"]
+categories = ["science", "mathematics"]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = ["python", "core"]
+python = ["dep:pyo3", "dep:numpy", "pyo3/extension-module"]
+
+# Core library feature flags
+core = [
+    "options",
+    "risk",
+    "portfolio",
+    "yield_curve",
+    "timeseries",
+    "monte_carlo",
+    "numerical",
+]
+
+# Domain-specific feature flags
+numerical = []
+options = ["numerical"]
+risk = ["numerical"]
+portfolio = []
+yield_curve = ["numerical"]
+timeseries = []
+monte_carlo = ["numerical"]
+
+[dependencies]
+# PyO3 for Python bindings
+pyo3 = { version = "0.27", features = ["abi3-py310"], optional = true }
+numpy = { version = "0.27", optional = true }
+
+# Numerical computing
+nalgebra = { version = "0.34", features = ["serde-serialize"] }
+ndarray = { version = "0.16", features = ["rayon", "serde"] }
+rand = "0.9"
+rand_distr = "0.5"
+rand_chacha = "0.9"
+statrs = "0.18"
+
+# Parallel processing
+rayon = "1.10"
+
+# Optimization
+osqp = "1.0"
+
+# Interpolation and splines
+splines = "5.0"
+
+# Special functions
+special = "0.11"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+thiserror = "2.0"
+anyhow = "1.0"
+
+# Logging (optional, for debugging)
+log = { version = "0.4", optional = true }
+
+[build-dependencies]
+pyo3-build-config = { version = "0.27", features = ["resolve-config"] }
+
+[dev-dependencies]
+proptest = "1.5"
+approx = "0.5"
+quickcheck = "1.0"
+quickcheck_macros = "1.0"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true
+panic = "abort"
+
+[profile.release.package."*"]
+opt-level = 3
+
+[profile.bench]
+inherits = "release"
+
+[profile.dev]
+opt-level = 1
+
+# Documentation configuration
+[package.metadata.docs.rs]
+features = []
+rustdoc-args = ["--cfg", "docsrs"]
