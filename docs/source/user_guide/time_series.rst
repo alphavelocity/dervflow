@@ -167,7 +167,7 @@ Measure correlation of a series with its own lagged values:
 
    # Plot ACF
    import matplotlib.pyplot as plt
-   
+
    plt.figure(figsize=(10, 4))
    plt.stem(range(len(acf)), acf)
    plt.xlabel('Lag')

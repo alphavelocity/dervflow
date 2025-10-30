@@ -154,4 +154,3 @@ def test_calculus_operations() -> None:
     curl_values = curl_values.reshape(len(grid_x), len(grid_y), len(grid_z), 3)
     mid_curl = curl_values[len(grid_x) // 2, len(grid_y) // 2, len(grid_z) // 2]
     assert pytest.approx(mid_curl[2], rel=5e-2, abs=5e-2) == 2.0
-

@@ -142,7 +142,7 @@ annualize_returns
 
       # Daily returns with 1% average
       daily_returns = np.random.normal(0.01/252, 0.02/np.sqrt(252), 252)
-      
+
       # Annualize
       annual_return = dervflow.utils.annualize_returns(daily_returns, periods_per_year=252)
       print(f"Annualized Return: {annual_return:.2%}")
@@ -183,7 +183,7 @@ annualize_volatility
       # Daily returns
       daily_returns = np.random.normal(0, 0.02, 252)
       daily_vol = np.std(daily_returns)
-      
+
       # Annualize
       annual_vol = dervflow.utils.annualize_volatility(daily_vol, periods_per_year=252)
       print(f"Daily Volatility: {daily_vol:.4f}")
@@ -209,7 +209,7 @@ sharpe_ratio
       Sharpe = \frac{E[R - R_f]}{\sigma_R} \times \sqrt{n}
 
    where:
-   
+
    * E[R - R_f] is the mean excess return
    * σ_R is the standard deviation of returns
    * n is periods_per_year
@@ -231,7 +231,7 @@ sharpe_ratio
       # Generate sample returns
       np.random.seed(42)
       daily_returns = np.random.normal(0.0005, 0.01, 252)  # ~12.5% annual return, 16% vol
-      
+
       # Calculate Sharpe ratio (assuming 2% risk-free rate)
       sharpe = dervflow.utils.sharpe_ratio(
           returns=daily_returns,
@@ -243,10 +243,10 @@ sharpe_ratio
       # Compare two strategies
       strategy_a = np.random.normal(0.0008, 0.015, 252)
       strategy_b = np.random.normal(0.0006, 0.008, 252)
-      
+
       sharpe_a = dervflow.utils.sharpe_ratio(strategy_a, 0.02/252, 252)
       sharpe_b = dervflow.utils.sharpe_ratio(strategy_b, 0.02/252, 252)
-      
+
       print(f"Strategy A Sharpe: {sharpe_a:.2f}")
       print(f"Strategy B Sharpe: {sharpe_b:.2f}")
 
@@ -288,10 +288,10 @@ sortino_ratio
           np.random.normal(0.001, 0.008, 200),  # Normal periods
           np.random.normal(0.003, 0.012, 52)    # High return periods
       ])
-      
+
       sharpe = dervflow.utils.sharpe_ratio(returns, 0.02/252, 252)
       sortino = dervflow.utils.sortino_ratio(returns, 0.02/252, 0.0, 252)
-      
+
       print(f"Sharpe Ratio: {sharpe:.2f}")
       print(f"Sortino Ratio: {sortino:.2f}")
       print(f"Sortino/Sharpe: {sortino/sharpe:.2f}")  # > 1 indicates positive skew
@@ -325,17 +325,17 @@ max_drawdown
 
       # Simulate price series with drawdown
       prices = np.array([100, 105, 110, 108, 95, 98, 105, 110, 115])
-      
+
       mdd = dervflow.utils.max_drawdown(prices)
       print(f"Maximum Drawdown: {mdd:.2%}")  # Should show ~-13.6%
-      
+
       # Find the drawdown period
       cummax = np.maximum.accumulate(prices)
       drawdown = (prices - cummax) / cummax
-      
+
       worst_idx = np.argmin(drawdown)
       peak_idx = np.argmax(cummax[:worst_idx+1])
-      
+
       print(f"Peak: ${prices[peak_idx]:.2f} at index {peak_idx}")
       print(f"Trough: ${prices[worst_idx]:.2f} at index {worst_idx}")
 
@@ -376,16 +376,16 @@ calmar_ratio
 
       # Calculate from price series
       prices = np.array([100, 105, 110, 108, 95, 98, 105, 110, 115, 120])
-      
+
       # Calculate annual return (assuming this is 1 year of data)
       annual_return = (prices[-1] - prices[0]) / prices[0]
-      
+
       # Calculate max drawdown
       mdd = dervflow.utils.max_drawdown(prices)
-      
+
       # Calculate Calmar ratio
       calmar = dervflow.utils.calmar_ratio(annual_return, abs(mdd))
-      
+
       print(f"Annual Return: {annual_return:.2%}")
       print(f"Max Drawdown: {mdd:.2%}")
       print(f"Calmar Ratio: {calmar:.2f}")

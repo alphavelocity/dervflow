@@ -40,12 +40,12 @@ Examples
 --------
 >>> import numpy as np
 >>> from dervflow.yield_curve import YieldCurve, YieldCurveBuilder, BondAnalytics
->>> 
+>>>
 >>> # Create a yield curve from rates
 >>> maturities = np.array([0.25, 0.5, 1.0, 2.0, 5.0, 10.0])
 >>> rates = np.array([0.02, 0.025, 0.03, 0.035, 0.04, 0.042])
 >>> curve = YieldCurve(maturities, rates, method='cubic_spline')
->>> 
+>>>
 >>> # Get zero rate at specific maturity
 >>> rate_3y = curve.zero_rate(3.0)
 >>> print(f"3-year zero rate: {rate_3y:.4f}")
@@ -67,10 +67,10 @@ Examples
 ... ]
 >>> builder = YieldCurveBuilder()
 >>> bootstrapped_curve = builder.bootstrap(bond_data)
->>> 
+>>>
 >>> # Calculate bond analytics
 >>> bond_analytics = BondAnalytics()
->>> 
+>>>
 >>> # Calculate yield to maturity
 >>> ytm = bond_analytics.yield_to_maturity(
 ...     price=102.0,
@@ -114,26 +114,16 @@ Examples
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from dervflow._dervflow import (
-        BondAnalytics,
-        MultiCurve,
-        SwapPeriod,
-        YieldCurve,
-        YieldCurveBuilder,
-    )
+    from dervflow._dervflow import (BondAnalytics, MultiCurve, SwapPeriod,
+                                    YieldCurve, YieldCurveBuilder)
 else:
-    from dervflow._dervflow import (
-        BondAnalytics,
-        MultiCurve,
-        SwapPeriod,
-        YieldCurve,
-        YieldCurveBuilder,
-    )
+    from dervflow._dervflow import (BondAnalytics, MultiCurve, SwapPeriod,
+                                    YieldCurve, YieldCurveBuilder)
 
 __all__ = [
-    'YieldCurve',
-    'MultiCurve',
-    'SwapPeriod',
-    'YieldCurveBuilder',
-    'BondAnalytics',
+    "YieldCurve",
+    "MultiCurve",
+    "SwapPeriod",
+    "YieldCurveBuilder",
+    "BondAnalytics",
 ]

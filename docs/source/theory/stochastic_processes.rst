@@ -61,7 +61,7 @@ The most common model for stock prices:
 
    # Simulate GBM paths
    mc_engine = dervflow.MonteCarloEngine()
-   
+
    paths = mc_engine.simulate_gbm(
        s0=100.0,      # Initial price
        mu=0.05,       # Drift (5% annual return)
@@ -131,7 +131,7 @@ Models mean-reverting behavior:
 
    # Simulate Ornstein-Uhlenbeck process
    mc_engine = dervflow.MonteCarloEngine()
-   
+
    paths = mc_engine.simulate_ou(
        x0=0.05,       # Initial value
        theta=0.5,     # Mean reversion speed
@@ -180,7 +180,7 @@ If :math:`2\kappa\theta > \sigma^2`, the process never reaches zero.
 
    # Simulate CIR process
    mc_engine = dervflow.MonteCarloEngine()
-   
+
    paths = mc_engine.simulate_cir(
        r0=0.03,       # Initial rate
        kappa=0.5,     # Mean reversion speed
@@ -261,7 +261,7 @@ where :math:`N_t` is a Poisson process with intensity :math:`\lambda`.
 
    # Simulate Merton jump-diffusion
    mc_engine = dervflow.MonteCarloEngine()
-   
+
    paths = mc_engine.simulate_jump_diffusion(
        s0=100.0,          # Initial price
        mu=0.05,           # Drift
@@ -395,7 +395,7 @@ To simulate :math:`n` correlated Brownian motions with correlation matrix :math:
 
    # Simulate correlated paths
    mc_engine = dervflow.MonteCarloEngine()
-   
+
    paths = mc_engine.simulate_correlated(
        processes=processes,
        correlation=correlation,
@@ -452,7 +452,7 @@ Effective when :math:`\text{Corr}[f(Z), f(-Z)] < 0`.
 
    # Price European option with antithetic variates
    mc_pricer = dervflow.MonteCarloOptionPricer()
-   
+
    result = mc_pricer.price_european(
        spot=100.0,
        strike=100.0,

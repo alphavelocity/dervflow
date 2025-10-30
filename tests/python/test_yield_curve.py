@@ -15,9 +15,11 @@ Tests cover:
 - Bond analytics (YTM, duration, convexity, DV01)
 """
 
-import pytest
 import numpy as np
-from dervflow import BondAnalytics, MultiCurve, SwapPeriod, YieldCurve, YieldCurveBuilder
+import pytest
+
+from dervflow import (BondAnalytics, MultiCurve, SwapPeriod, YieldCurve,
+                      YieldCurveBuilder)
 
 
 class TestYieldCurveConstruction:
@@ -27,7 +29,7 @@ class TestYieldCurveConstruction:
         """Test yield curve with linear interpolation"""
         times = np.array([1.0, 2.0, 5.0, 10.0])
         rates = np.array([0.03, 0.035, 0.04, 0.045])
-        curve = YieldCurve(times, rates, method='linear')
+        curve = YieldCurve(times, rates, method="linear")
 
         # Test exact points
         assert abs(curve.zero_rate(2.0) - 0.035) < 1e-10
@@ -41,7 +43,7 @@ class TestYieldCurveConstruction:
         """Test yield curve with natural cubic spline"""
         times = np.array([1.0, 2.0, 5.0, 10.0])
         rates = np.array([0.03, 0.035, 0.04, 0.045])
-        curve = YieldCurve(times, rates, method='cubic_spline_natural')
+        curve = YieldCurve(times, rates, method="cubic_spline_natural")
 
         # Test exact points
         for i, t in enumerate(times):
@@ -56,7 +58,7 @@ class TestYieldCurveConstruction:
         """Test yield curve with clamped cubic spline"""
         times = np.array([1.0, 2.0, 5.0, 10.0])
         rates = np.array([0.03, 0.035, 0.04, 0.045])
-        curve = YieldCurve(times, rates, method='cubic_spline_clamped')
+        curve = YieldCurve(times, rates, method="cubic_spline_clamped")
 
         # Test exact points
         for i, t in enumerate(times):
@@ -66,7 +68,7 @@ class TestYieldCurveConstruction:
         """Test discount factor calculation"""
         times = np.array([1.0, 2.0, 5.0, 10.0])
         rates = np.array([0.03, 0.035, 0.04, 0.045])
-        curve = YieldCurve(times, rates, method='linear')
+        curve = YieldCurve(times, rates, method="linear")
 
         # DF at t=0 should be 1
         assert abs(curve.discount_factor(0.0) - 1.0) < 1e-10
@@ -85,7 +87,7 @@ class TestYieldCurveConstruction:
         """Test forward rate calculation"""
         times = np.array([1.0, 2.0, 5.0, 10.0])
         rates = np.array([0.03, 0.035, 0.04, 0.045])
-        curve = YieldCurve(times, rates, method='linear')
+        curve = YieldCurve(times, rates, method="linear")
 
         # Forward rate from year 1 to year 2
         f = curve.forward_rate(1.0, 2.0)
@@ -100,13 +102,13 @@ class TestYieldCurveConstruction:
         """Test bond pricing from yield curve"""
         times = np.array([1.0, 2.0, 5.0, 10.0])
         rates = np.array([0.03, 0.035, 0.04, 0.045])
-        curve = YieldCurve(times, rates, method='linear')
+        curve = YieldCurve(times, rates, method="linear")
 
         # Simple bond with annual coupons
         cashflows = [
-            (1.0, 5.0),   # Coupon at year 1
-            (2.0, 5.0),   # Coupon at year 2
-            (2.0, 100.0), # Principal at year 2
+            (1.0, 5.0),  # Coupon at year 1
+            (2.0, 5.0),  # Coupon at year 2
+            (2.0, 100.0),  # Principal at year 2
         ]
 
         price = curve.price_bond(cashflows)
@@ -118,14 +120,14 @@ class TestYieldCurveConstruction:
         times = np.array([1.0, 0.5, 2.0])  # Not sorted
         rates = np.array([0.03, 0.035, 0.04])
         with pytest.raises(Exception):
-            YieldCurve(times, rates, method='linear')
+            YieldCurve(times, rates, method="linear")
 
     def test_empty_curve(self):
         """Test that empty arrays raise error"""
         times = np.array([])
         rates = np.array([])
         with pytest.raises(Exception):
-            YieldCurve(times, rates, method='linear')
+            YieldCurve(times, rates, method="linear")
 
 
 class TestBootstrapping:
@@ -183,11 +185,7 @@ class TestNelsonSiegel:
         """Test Nelson-Siegel yield curve"""
         times = np.array([1.0, 2.0, 5.0, 10.0, 20.0])
         curve = YieldCurveBuilder.from_nelson_siegel(
-            beta0=0.05,
-            beta1=-0.02,
-            beta2=0.01,
-            lambda_=1.0,
-            times=times
+            beta0=0.05, beta1=-0.02, beta2=0.01, lambda_=1.0, times=times
         )
 
         # Check that we got a valid curve
@@ -206,13 +204,7 @@ class TestNelsonSiegel:
         """Test Nelson-Siegel-Svensson yield curve"""
         times = np.array([1.0, 2.0, 5.0, 10.0, 20.0])
         curve = YieldCurveBuilder.from_nelson_siegel_svensson(
-            beta0=0.05,
-            beta1=-0.02,
-            beta2=0.01,
-            beta3=0.005,
-            lambda1=1.0,
-            lambda2=3.0,
-            times=times
+            beta0=0.05, beta1=-0.02, beta2=0.01, beta3=0.005, lambda1=1.0, lambda2=3.0, times=times
         )
 
         # Check that we got a valid curve
@@ -238,10 +230,7 @@ class TestBondAnalytics:
     def test_generate_cashflows(self):
         """Test cashflow generation for standard bond"""
         cashflows = BondAnalytics.generate_cashflows(
-            maturity=2.0,
-            coupon_rate=0.05,
-            face_value=100.0,
-            frequency=2
+            maturity=2.0, coupon_rate=0.05, face_value=100.0, frequency=2
         )
 
         assert len(cashflows) == 4
@@ -341,7 +330,7 @@ class TestBondAnalytics:
         # Test duration calculation (more reliable than YTM for zero coupon)
         duration = self.ba.macaulay_duration(0.05, cashflows)
         assert abs(duration - 5.0) < 1e-6  # Duration equals maturity for zero coupon
-        
+
         # Test YTM calculation
         ytm = self.ba.yield_to_maturity(77.88, cashflows)
         # YTM should be positive and reasonable (between 0 and 0.2)
@@ -389,7 +378,7 @@ class TestYieldCurveIntegration:
         """Test that forward rates are consistent with zero rates"""
         times = np.array([1.0, 2.0, 3.0, 5.0])
         rates = np.array([0.03, 0.035, 0.038, 0.04])
-        curve = YieldCurve(times, rates, method='linear')
+        curve = YieldCurve(times, rates, method="linear")
 
         # Forward rate from 1 to 3 should be consistent
         f_1_3 = curve.forward_rate(1.0, 3.0)
@@ -405,7 +394,7 @@ class TestYieldCurveIntegration:
         """Test that discount factors are consistent with zero rates"""
         times = np.array([1.0, 2.0, 5.0, 10.0])
         rates = np.array([0.03, 0.035, 0.04, 0.045])
-        curve = YieldCurve(times, rates, method='linear')
+        curve = YieldCurve(times, rates, method="linear")
 
         for t in [1.0, 2.5, 5.0, 7.5]:
             df = curve.discount_factor(t)
@@ -439,8 +428,8 @@ class TestMultiCurve:
         discount_rates = np.array([0.02, 0.02, 0.02, 0.02])
         forward_rates = np.array([0.03, 0.031, 0.032, 0.033])
 
-        self.discount_curve = YieldCurve(times, discount_rates, method='linear')
-        self.forward_curve = YieldCurve(times, forward_rates, method='linear')
+        self.discount_curve = YieldCurve(times, discount_rates, method="linear")
+        self.forward_curve = YieldCurve(times, forward_rates, method="linear")
 
     @staticmethod
     def _schedule():
@@ -476,9 +465,7 @@ class TestMultiCurve:
 
         assert abs(pv_at_par) < 1e-2
 
-        pv_above_par = mc.price_payer_swap(
-            "LIBOR3M", schedule, par_rate + 0.01, 1_000_000.0
-        )
+        pv_above_par = mc.price_payer_swap("LIBOR3M", schedule, par_rate + 0.01, 1_000_000.0)
         assert pv_above_par < 0.0
 
     def test_swap_pricing_validates_schedule(self):

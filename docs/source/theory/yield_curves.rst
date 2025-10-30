@@ -280,13 +280,13 @@ Measures price sensitivity to yield changes:
 
    # Calculate duration
    curve = dervflow.YieldCurve(dates, rates)
-   
+
    duration = dervflow.bond_duration(
        coupon=0.03,
        maturity=5.0,
        yield_curve=curve
    )
-   
+
    print(f"Macaulay duration: {duration['macaulay']:.2f} years")
    print(f"Modified duration: {duration['modified']:.2f}")
 
@@ -468,7 +468,7 @@ Interest Rate Risk Management
        price = dervflow.price_bond(
            bond['coupon'], bond['maturity'], 100, curve
        )
-       
+
        portfolio_duration += duration['modified'] * bond['notional'] * price / 100
        portfolio_dv01 += duration['modified'] * bond['notional'] * price / 100 * 0.0001
 

@@ -102,4 +102,3 @@ opt-level = 1
 [package.metadata.docs.rs]
 features = []
 rustdoc-args = ["--cfg", "docsrs"]
-

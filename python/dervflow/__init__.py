@@ -69,69 +69,41 @@ Examples
 
 __version__ = "0.1.0"
 
+# Import core Rust classes from the compiled extension
+from dervflow._dervflow import (AsianOption, BarrierOption, BinomialTreeModel,
+                                BlackScholesModel, BondAnalytics,
+                                DigitalOption, GreeksCalculator,
+                                LookbackOption, MonteCarloEngine,
+                                MonteCarloOptionPricer, MultiCurve,
+                                RiskMetrics, SABRModel, SwapPeriod,
+                                TimeSeriesAnalyzer, VolatilitySurface,
+                                YieldCurve, YieldCurveBuilder)
+from dervflow.numerical import (AdaptiveGaussLegendreIntegrator,
+                                AdaptiveSimpsonsIntegrator, BFGSOptimizer,
+                                BisectionSolver, BrentSolver,
+                                GaussLegendreIntegrator,
+                                GradientDescentOptimizer, HaltonSequence,
+                                IntegrationResult, LinearAlgebra,
+                                NelderMeadOptimizer, NewtonRaphsonSolver,
+                                OptimizationResult, RandomGenerator,
+                                RootFindingResult, SecantSolver, SobolSequence,
+                                ThreadLocalRandom)
+# Import Python wrapper classes
+from dervflow.portfolio import (BlackLittermanModel, FactorModel,
+                                InvestorViews, PortfolioOptimizer,
+                                RiskParityOptimizer)
+
 from . import core as core
 from . import utils as utils
-# Import core Rust classes from the compiled extension
-from dervflow._dervflow import (
-    AsianOption,
-    BarrierOption,
-    BlackScholesModel,
-    BinomialTreeModel,
-    BondAnalytics,
-    DigitalOption,
-    GreeksCalculator,
-    LookbackOption,
-    MonteCarloEngine,
-    MonteCarloOptionPricer,
-    MultiCurve,
-    RiskMetrics,
-    SABRModel,
-    SwapPeriod,
-    TimeSeriesAnalyzer,
-    VolatilitySurface,
-    YieldCurve,
-    YieldCurveBuilder,
-)
-
-# Import Python wrapper classes
-from dervflow.portfolio import (
-    PortfolioOptimizer,
-    RiskParityOptimizer,
-    BlackLittermanModel,
-    InvestorViews,
-    FactorModel,
-)
-from dervflow.numerical import (
-    AdaptiveGaussLegendreIntegrator,
-    AdaptiveSimpsonsIntegrator,
-    BFGSOptimizer,
-    BisectionSolver,
-    BrentSolver,
-    GaussLegendreIntegrator,
-    GradientDescentOptimizer,
-    HaltonSequence,
-    IntegrationResult,
-    LinearAlgebra,
-    NelderMeadOptimizer,
-    NewtonRaphsonSolver,
-    OptimizationResult,
-    RandomGenerator,
-    RootFindingResult,
-    SecantSolver,
-    SobolSequence,
-    ThreadLocalRandom,
-)
 
 # Define public API
 __all__ = [
     # Version
     "__version__",
-    
     # Options pricing
     "BlackScholesModel",
     "BinomialTreeModel",
     "MonteCarloOptionPricer",
-
     # Exotic options
     "AsianOption",
     "BarrierOption",
@@ -139,57 +111,46 @@ __all__ = [
     "DigitalOption",
     "VolatilitySurface",
     "SABRModel",
-    
     # Risk analytics
     "GreeksCalculator",
     "RiskMetrics",
-    
     # Portfolio optimization
     "PortfolioOptimizer",
     "RiskParityOptimizer",
     "BlackLittermanModel",
     "InvestorViews",
     "FactorModel",
-    
     # Time series analysis
     "TimeSeriesAnalyzer",
-    
     # Yield curves
     "YieldCurve",
     "YieldCurveBuilder",
     "BondAnalytics",
     "MultiCurve",
     "SwapPeriod",
-
     # Monte Carlo simulation
     "MonteCarloEngine",
-
     # Numerical integration
     "AdaptiveSimpsonsIntegrator",
     "GaussLegendreIntegrator",
     "AdaptiveGaussLegendreIntegrator",
     "IntegrationResult",
-
     # Root finding
     "NewtonRaphsonSolver",
     "BrentSolver",
     "BisectionSolver",
     "SecantSolver",
     "RootFindingResult",
-
     # Optimization
     "GradientDescentOptimizer",
     "BFGSOptimizer",
     "NelderMeadOptimizer",
     "OptimizationResult",
-
     # Linear algebra utilities
     "LinearAlgebra",
-
     # Core mathematics
     "core",
     "utils",
-
     # Random number generation
     "RandomGenerator",
     "ThreadLocalRandom",

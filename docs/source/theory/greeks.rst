@@ -300,7 +300,7 @@ To create a delta-neutral portfolio, hold :math:`-\Delta` units of the underlyin
 
    bs_model = dervflow.BlackScholesModel()
    greeks = bs_model.greeks(100, 100, 0.05, 0, 0.25, 1, 'call')
-   
+
    options_held = 100  # Long 100 call options
    hedge_ratio = -greeks['delta'] * options_held
    print(f"Hedge with {hedge_ratio:.2f} shares")
@@ -324,7 +324,7 @@ Monitor vega exposure to manage volatility risk:
 
 .. code-block:: python
 
-   portfolio_vega = sum(position.quantity * position.vega 
+   portfolio_vega = sum(position.quantity * position.vega
                         for position in portfolio)
    print(f"Portfolio vega: {portfolio_vega:.2f}")
 
@@ -334,7 +334,7 @@ Understand time decay impact on portfolio value:
 
 .. code-block:: python
 
-   daily_theta = sum(position.quantity * position.theta 
+   daily_theta = sum(position.quantity * position.theta
                      for position in portfolio)
    print(f"Expected daily P&L from time decay: ${daily_theta:.2f}")
 

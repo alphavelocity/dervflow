@@ -625,7 +625,10 @@ mod tests {
         let result = gauss_legendre(f, 0.0, 1.0, 7);
 
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), DervflowError::InvalidInput(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            DervflowError::InvalidInput(_)
+        ));
     }
 
     #[test]

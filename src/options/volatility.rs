@@ -392,7 +392,10 @@ mod tests {
         // Negative price
         let result = implied_volatility_newton(-10.0, &params, 0.0001, 100);
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), DervflowError::InvalidInput(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            DervflowError::InvalidInput(_)
+        ));
 
         // Zero price
         let result = implied_volatility_newton(0.0, &params, 0.0001, 100);
@@ -406,7 +409,10 @@ mod tests {
         // Price below intrinsic value (10.0)
         let result = implied_volatility_newton(5.0, &params, 0.0001, 100);
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), DervflowError::InvalidInput(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            DervflowError::InvalidInput(_)
+        ));
     }
 
     #[test]
@@ -415,7 +421,10 @@ mod tests {
 
         let result = implied_volatility_newton(10.0, &params, 0.0001, 100);
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), DervflowError::InvalidInput(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            DervflowError::InvalidInput(_)
+        ));
     }
 
     #[test]

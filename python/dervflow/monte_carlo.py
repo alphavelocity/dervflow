@@ -35,10 +35,10 @@ Examples
 --------
 >>> import numpy as np
 >>> from dervflow.monte_carlo import MonteCarloEngine
->>> 
+>>>
 >>> # Create Monte Carlo engine
 >>> mc = MonteCarloEngine()
->>> 
+>>>
 >>> # Simulate Geometric Brownian Motion
 >>> gbm_paths = mc.simulate_gbm(
 ...     s0=100.0,           # Initial price
@@ -147,5 +147,5 @@ else:
     from dervflow._dervflow import MonteCarloEngine
 
 __all__ = [
-    'MonteCarloEngine',
+    "MonteCarloEngine",
 ]

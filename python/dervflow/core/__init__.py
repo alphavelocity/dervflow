@@ -8,77 +8,27 @@
 
 from __future__ import annotations
 
-from ._backend import ArrayLike
 from . import calc, combinatorics, series, stat, vectors
-from .combinatorics import (
-    binomial_probability,
-    catalan_number,
-    combination,
-    factorial,
-    falling_factorial,
-    multinomial,
-    permutation,
-    rising_factorial,
-    bell_number,
-    lah_number,
-    stirling_number_first,
-    stirling_number_second,
-)
-from .series import (
-    cumulative_max,
-    cumulative_min,
-    cumulative_product,
-    cumulative_sum,
-    first_difference,
-    moving_average,
-)
-from .stat import (
-    correlation,
-    coefficient_of_variation,
-    central_moment,
-    covariance,
-    geometric_mean,
-    harmonic_mean,
-    interquartile_range,
-    kurtosis,
-    mean_absolute_deviation,
-    mean,
-    median_absolute_deviation,
-    root_mean_square,
-    median,
-    percentile,
-    skewness,
-    standard_deviation,
-    variance,
-    weighted_mean,
-    z_scores,
-)
-from .vectors import (
-    angle_between,
-    chebyshev_distance,
-    cosine_similarity,
-    cross_product,
-    dot,
-    euclidean_distance,
-    hadamard_product,
-    lp_norm,
-    manhattan_distance,
-    norm,
-    normalize,
-    projection,
-    scalar_multiply,
-    vector_add,
-    vector_subtract,
-)
-from .calc import (
-    curl,
-    cumulative_integral,
-    definite_integral,
-    derivative,
-    divergence,
-    gradient,
-    second_derivative,
-)
+from ._backend import ArrayLike
+from .calc import (cumulative_integral, curl, definite_integral, derivative,
+                   divergence, gradient, second_derivative)
+from .combinatorics import (bell_number, binomial_probability, catalan_number,
+                            combination, factorial, falling_factorial,
+                            lah_number, multinomial, permutation,
+                            rising_factorial, stirling_number_first,
+                            stirling_number_second)
+from .series import (cumulative_max, cumulative_min, cumulative_product,
+                     cumulative_sum, first_difference, moving_average)
+from .stat import (central_moment, coefficient_of_variation, correlation,
+                   covariance, geometric_mean, harmonic_mean,
+                   interquartile_range, kurtosis, mean,
+                   mean_absolute_deviation, median, median_absolute_deviation,
+                   percentile, root_mean_square, skewness, standard_deviation,
+                   variance, weighted_mean, z_scores)
+from .vectors import (angle_between, chebyshev_distance, cosine_similarity,
+                      cross_product, dot, euclidean_distance, hadamard_product,
+                      lp_norm, manhattan_distance, norm, normalize, projection,
+                      scalar_multiply, vector_add, vector_subtract)
 
 __all__ = [
     "ArrayLike",

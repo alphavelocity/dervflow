@@ -248,7 +248,8 @@ mod tests {
 
     #[test]
     fn test_optimization_infeasible_display() {
-        let err = DervflowError::OptimizationInfeasible("constraints are contradictory".to_string());
+        let err =
+            DervflowError::OptimizationInfeasible("constraints are contradictory".to_string());
         assert_eq!(
             format!("{}", err),
             "Optimization infeasible: constraints are contradictory"

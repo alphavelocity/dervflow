@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import math
+
 import numpy as np
 
 from ._backend import ArrayLike, _as_array, _as_pair, _core
@@ -93,9 +94,7 @@ def median_absolute_deviation(
 def coefficient_of_variation(data: ArrayLike, unbiased: bool = True) -> float:
     """Return the coefficient of variation of *data*."""
 
-    return _core().coefficient_of_variation(
-        _as_array("data", data), unbiased=unbiased
-    )
+    return _core().coefficient_of_variation(_as_array("data", data), unbiased=unbiased)
 
 
 def central_moment(data: ArrayLike, order: int) -> float:

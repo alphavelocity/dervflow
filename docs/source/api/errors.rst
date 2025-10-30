@@ -58,7 +58,7 @@ InvalidInputError
    Raised when input parameters are invalid.
 
    This exception is raised when function arguments violate constraints such as:
-   
+
    * Negative prices or volatilities
    * Invalid option types
    * Mismatched array dimensions
@@ -411,7 +411,7 @@ Always validate inputs before calling dervflow functions:
 
    def safe_option_price(spot, strike, rate, dividend, volatility, time, option_type):
        """Safely price an option with input validation."""
-       
+
        # Validate inputs
        if spot <= 0:
            raise ValueError(f"Spot must be positive, got {spot}")
@@ -423,7 +423,7 @@ Always validate inputs before calling dervflow functions:
            raise ValueError(f"Time must be positive, got {time}")
        if option_type not in ['call', 'put']:
            raise ValueError(f"Option type must be 'call' or 'put', got {option_type}")
-       
+
        # Price option
        bs = dervflow.BlackScholesModel()
        try:
@@ -444,9 +444,9 @@ Handle errors gracefully and provide fallback values:
 
    def calculate_implied_vol_with_fallback(market_price, spot, strike, rate, dividend, time, option_type):
        """Calculate implied volatility with fallback to historical volatility."""
-       
+
        bs = dervflow.BlackScholesModel()
-       
+
        try:
            # Try to calculate implied volatility
            return bs.implied_vol(market_price, spot, strike, rate, dividend, time, option_type)
@@ -471,17 +471,17 @@ When processing multiple items, handle errors individually:
 
    def price_option_chain_safe(spot, strikes, rate, dividend, volatility, time, option_type):
        """Price option chain with individual error handling."""
-       
+
        bs = dervflow.BlackScholesModel()
        results = []
-       
+
        for strike in strikes:
            try:
                price = bs.price(spot, strike, rate, dividend, volatility, time, option_type)
                results.append({'strike': strike, 'price': price, 'error': None})
            except dervflow.DervflowError as e:
                results.append({'strike': strike, 'price': np.nan, 'error': str(e)})
-       
+
        return pd.DataFrame(results)
 
    # Usage
@@ -504,9 +504,9 @@ Use Python's logging module for production code:
 
    def calculate_portfolio_metrics(returns, confidence=0.95):
        """Calculate portfolio metrics with logging."""
-       
+
        risk = dervflow.RiskMetrics()
-       
+
        try:
            var = risk.var(returns, confidence, method='historical')
            logger.info(f"VaR calculated successfully: {var:.4f}")
@@ -535,12 +535,12 @@ Use context managers for resource cleanup:
    @contextmanager
    def monte_carlo_simulation(seed=None):
        """Context manager for Monte Carlo simulations with cleanup."""
-       
+
        if seed is not None:
            np.random.seed(seed)
-       
+
        mc = dervflow.MonteCarloEngine()
-       
+
        try:
            yield mc
        except dervflow.DervflowError as e:

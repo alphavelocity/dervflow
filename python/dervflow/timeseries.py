@@ -19,27 +19,27 @@ Examples
 --------
 >>> import numpy as np
 >>> from dervflow.timeseries import TimeSeriesAnalyzer
->>> 
+>>>
 >>> # Create sample price data
 >>> prices = np.array([100.0, 102.0, 101.5, 103.0, 104.5, 103.8, 105.2])
->>> 
+>>>
 >>> # Initialize analyzer
 >>> analyzer = TimeSeriesAnalyzer(prices)
->>> 
+>>>
 >>> # Calculate returns
 >>> returns = analyzer.returns(method='log')
->>> 
+>>>
 >>> # Get statistical measures
 >>> stats = analyzer.stat()
 >>> print(f"Mean: {stats['mean']:.4f}, Std Dev: {stats['std_dev']:.4f}")
->>> 
+>>>
 >>> # Calculate autocorrelation
 >>> acf = analyzer.autocorrelation(max_lag=10)
->>> 
+>>>
 >>> # Fit GARCH model
 >>> garch_result = analyzer.fit_garch(variant='standard')
 >>> print(f"Alpha: {garch_result['alpha']:.4f}, Beta: {garch_result['beta']:.4f}")
->>> 
+>>>
 >>> # Test for stationarity
 >>> adf_result = analyzer.stationarity_test(test='adf')
 >>> print(f"ADF Statistic: {adf_result['statistic']:.4f}")
@@ -53,4 +53,4 @@ if TYPE_CHECKING:
 else:
     from dervflow._dervflow import TimeSeriesAnalyzer
 
-__all__ = ['TimeSeriesAnalyzer']
+__all__ = ["TimeSeriesAnalyzer"]

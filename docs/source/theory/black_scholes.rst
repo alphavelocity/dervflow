@@ -84,7 +84,7 @@ Derivation
 The Black-Scholes formula is derived using the following approach:
 
 1. **Construct a Hedged Portfolio**: Create a portfolio consisting of:
-   
+
    * Long one option
    * Short :math:`\Delta` units of the underlying asset
 
@@ -103,7 +103,7 @@ The Black-Scholes formula is derived using the following approach:
       \frac{\partial V}{\partial t} + (r-q)S\frac{\partial V}{\partial S} + \frac{1}{2}\sigma^2 S^2 \frac{\partial^2 V}{\partial S^2} = rV
 
 5. **Boundary Conditions**: Apply terminal conditions:
-   
+
    * Call: :math:`V(S, T) = \max(S - K, 0)`
    * Put: :math:`V(S, T) = \max(K - S, 0)`
 

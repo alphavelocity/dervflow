@@ -14,11 +14,13 @@ def simulate_portfolio_returns(seed: int = 11):
     days = 1000
     mean_daily = np.array([0.0004, 0.0003, 0.0002])
     vol_daily = np.array([0.012, 0.015, 0.010])
-    corr = np.array([
-        [1.0, 0.55, 0.35],
-        [0.55, 1.0, 0.40],
-        [0.35, 0.40, 1.0],
-    ])
+    corr = np.array(
+        [
+            [1.0, 0.55, 0.35],
+            [0.55, 1.0, 0.40],
+            [0.35, 0.40, 1.0],
+        ]
+    )
     cov = np.outer(vol_daily, vol_daily) * corr
     asset_returns = rng.multivariate_normal(mean_daily, cov, size=days)
 
@@ -44,7 +46,9 @@ def compute_risk_metrics(asset_returns, portfolio_returns, weights):
     )
     cvar_95 = risk_metrics.cvar(returns=portfolio_returns, confidence_level=0.95)
     max_drawdown = risk_metrics.max_drawdown(portfolio_returns)
-    sortino = risk_metrics.sortino_ratio(portfolio_returns, risk_free_rate=0.02 / 252, target_return=0.0)
+    sortino = risk_metrics.sortino_ratio(
+        portfolio_returns, risk_free_rate=0.02 / 252, target_return=0.0
+    )
 
     print("=" * 68)
     print("Daily risk measures")
@@ -58,7 +62,9 @@ def compute_risk_metrics(asset_returns, portfolio_returns, weights):
 
     cov = np.cov(asset_returns, rowvar=False)
     exp_returns = np.mean(asset_returns, axis=0)
-    metrics = risk_metrics.portfolio_metrics(weights, cov, expected_returns=exp_returns, risk_free_rate=0.02 / 252)
+    metrics = risk_metrics.portfolio_metrics(
+        weights, cov, expected_returns=exp_returns, risk_free_rate=0.02 / 252
+    )
 
     annual_return = np.power(1.0 + metrics["expected_return"], 252) - 1.0
     annual_vol = metrics["volatility"] * np.sqrt(252.0)

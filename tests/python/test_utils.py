@@ -81,9 +81,12 @@ def test_annualize_returns_invalid(bad_returns):
         utils.annualize_returns(bad_returns)
 
 
-@pytest.mark.parametrize("volatility, periods, expected", [
-    (0.1, 12, 0.1 * math.sqrt(12)),
-])
+@pytest.mark.parametrize(
+    "volatility, periods, expected",
+    [
+        (0.1, 12, 0.1 * math.sqrt(12)),
+    ],
+)
 def test_annualize_volatility_scalar(volatility, periods, expected):
     assert math.isclose(utils.annualize_volatility(volatility, periods), expected)
 
@@ -161,10 +164,9 @@ def test_moment_ratios_match_manual():
     n = len(returns)
     std = np.std(returns, ddof=1)
     expected_skew = (n / ((n - 1) * (n - 2))) * np.sum(diff**3) / std**3
-    expected_kurt = (
-        (n * (n + 1)) / ((n - 1) * (n - 2) * (n - 3)) * np.sum(diff**4) / std**4
-        - 3 * (n - 1) ** 2 / ((n - 2) * (n - 3))
-    )
+    expected_kurt = (n * (n + 1)) / ((n - 1) * (n - 2) * (n - 3)) * np.sum(
+        diff**4
+    ) / std**4 - 3 * (n - 1) ** 2 / ((n - 2) * (n - 3))
 
     assert math.isclose(utils.skewness(returns), expected_skew)
     assert math.isclose(utils.excess_kurtosis(returns), expected_kurt)
@@ -194,7 +196,10 @@ def test_alpha_matches_manual():
     excess_port = np.mean(returns - risk_free) * periods
     excess_bench = np.mean(benchmark - risk_free) * periods
     expected = excess_port - beta_value * excess_bench
-    assert math.isclose(utils.alpha(returns, benchmark, risk_free_rate=risk_free, periods_per_year=periods), expected)
+    assert math.isclose(
+        utils.alpha(returns, benchmark, risk_free_rate=risk_free, periods_per_year=periods),
+        expected,
+    )
 
 
 def test_alpha_with_nan_risk_free_matches_manual():
@@ -231,10 +236,12 @@ def test_sortino_ratio_matches_manual():
     target = 0.0
     excess = returns - risk_free
     downside = np.minimum(returns - target, 0.0)
-    downside_std = math.sqrt(np.mean(downside ** 2)) * math.sqrt(12)
+    downside_std = math.sqrt(np.mean(downside**2)) * math.sqrt(12)
     expected = np.mean(excess) * 12 / downside_std
     assert math.isclose(
-        utils.sortino_ratio(returns, risk_free_rate=risk_free, target_return=target, periods_per_year=12),
+        utils.sortino_ratio(
+            returns, risk_free_rate=risk_free, target_return=target, periods_per_year=12
+        ),
         expected,
     )
 
@@ -267,17 +274,15 @@ def test_capture_ratios_match_manual():
     mask_up = benchmark > 0
     port_up_growth = np.prod(1.0 + returns[mask_up])
     bench_up_growth = np.prod(1.0 + benchmark[mask_up])
-    up_expected = (
-        (port_up_growth ** (periods / mask_up.sum()) - 1.0)
-        / (bench_up_growth ** (periods / mask_up.sum()) - 1.0)
+    up_expected = (port_up_growth ** (periods / mask_up.sum()) - 1.0) / (
+        bench_up_growth ** (periods / mask_up.sum()) - 1.0
     )
 
     mask_down = benchmark < 0
     port_down_growth = np.prod(1.0 + returns[mask_down])
     bench_down_growth = np.prod(1.0 + benchmark[mask_down])
-    down_expected = (
-        (port_down_growth ** (periods / mask_down.sum()) - 1.0)
-        / (bench_down_growth ** (periods / mask_down.sum()) - 1.0)
+    down_expected = (port_down_growth ** (periods / mask_down.sum()) - 1.0) / (
+        bench_down_growth ** (periods / mask_down.sum()) - 1.0
     )
 
     assert math.isclose(
@@ -331,41 +336,56 @@ def test_drawdown_series_invalid_prices(prices):
         utils.drawdown_series(prices)
 
 
-@pytest.mark.parametrize("returns, risk_free", [
-    ([0.01, 0.02], [0.001, 0.002, 0.003]),
-])
+@pytest.mark.parametrize(
+    "returns, risk_free",
+    [
+        ([0.01, 0.02], [0.001, 0.002, 0.003]),
+    ],
+)
 def test_sharpe_ratio_mismatched_inputs(returns, risk_free):
     with pytest.raises(ValueError):
         utils.sharpe_ratio(returns, risk_free)
 
 
-@pytest.mark.parametrize("returns, risk_free", [
-    ([0.02, 0.03], [0.01]),
-])
+@pytest.mark.parametrize(
+    "returns, risk_free",
+    [
+        ([0.02, 0.03], [0.01]),
+    ],
+)
 def test_sortino_ratio_mismatched_inputs(returns, risk_free):
     with pytest.raises(ValueError):
         utils.sortino_ratio(returns, risk_free)
 
 
-@pytest.mark.parametrize("returns, benchmark", [
-    ([0.01, 0.02], [0.015]),
-])
+@pytest.mark.parametrize(
+    "returns, benchmark",
+    [
+        ([0.01, 0.02], [0.015]),
+    ],
+)
 def test_tracking_error_mismatched_inputs(returns, benchmark):
     with pytest.raises(ValueError):
         utils.tracking_error(returns, benchmark)
 
 
-@pytest.mark.parametrize("returns, benchmark", [
-    ([0.01], [0.008]),
-])
+@pytest.mark.parametrize(
+    "returns, benchmark",
+    [
+        ([0.01], [0.008]),
+    ],
+)
 def test_beta_requires_two_observations(returns, benchmark):
     with pytest.raises(ValueError):
         utils.beta(returns, benchmark)
 
 
-@pytest.mark.parametrize("returns, benchmark, risk_free", [
-    ([0.01, 0.02], [0.015], 0.001),
-])
+@pytest.mark.parametrize(
+    "returns, benchmark, risk_free",
+    [
+        ([0.01, 0.02], [0.015], 0.001),
+    ],
+)
 def test_alpha_mismatched_inputs(returns, benchmark, risk_free):
     with pytest.raises(ValueError):
         utils.alpha(returns, benchmark, risk_free)

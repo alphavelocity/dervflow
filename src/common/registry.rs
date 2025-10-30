@@ -48,10 +48,9 @@ impl ModelRegistry {
     /// * `Result<()>` - Success or error if registration fails
     pub fn register_pricing_model(&self, model: Box<dyn PricingModel>) -> Result<()> {
         let name = model.model_name().to_string();
-        let mut models = self
-            .pricing_models
-            .write()
-            .map_err(|e| DervflowError::DataError(format!("Failed to acquire write lock: {}", e)))?;
+        let mut models = self.pricing_models.write().map_err(|e| {
+            DervflowError::DataError(format!("Failed to acquire write lock: {}", e))
+        })?;
 
         if models.contains_key(&name) {
             return Err(DervflowError::InvalidInput(format!(
@@ -108,10 +107,9 @@ impl ModelRegistry {
     /// * `Result<()>` - Success or error if registration fails
     pub fn register_process(&self, process: Box<dyn StochasticProcess>) -> Result<()> {
         let name = process.process_name().to_string();
-        let mut processes = self
-            .processes
-            .write()
-            .map_err(|e| DervflowError::DataError(format!("Failed to acquire write lock: {}", e)))?;
+        let mut processes = self.processes.write().map_err(|e| {
+            DervflowError::DataError(format!("Failed to acquire write lock: {}", e))
+        })?;
 
         if processes.contains_key(&name) {
             return Err(DervflowError::InvalidInput(format!(
@@ -168,10 +166,9 @@ impl ModelRegistry {
     /// * `Result<()>` - Success or error if registration fails
     pub fn register_interpolator(&self, interpolator: Box<dyn Interpolator>) -> Result<()> {
         let name = interpolator.interpolator_name().to_string();
-        let mut interpolators = self
-            .interpolators
-            .write()
-            .map_err(|e| DervflowError::DataError(format!("Failed to acquire write lock: {}", e)))?;
+        let mut interpolators = self.interpolators.write().map_err(|e| {
+            DervflowError::DataError(format!("Failed to acquire write lock: {}", e))
+        })?;
 
         if interpolators.contains_key(&name) {
             return Err(DervflowError::InvalidInput(format!(
@@ -205,10 +202,9 @@ impl ModelRegistry {
     /// * `Result<()>` - Success or error if registration fails
     pub fn register_optimizer(&self, optimizer: Box<dyn Optimizer>) -> Result<()> {
         let name = optimizer.optimizer_name().to_string();
-        let mut optimizers = self
-            .optimizers
-            .write()
-            .map_err(|e| DervflowError::DataError(format!("Failed to acquire write lock: {}", e)))?;
+        let mut optimizers = self.optimizers.write().map_err(|e| {
+            DervflowError::DataError(format!("Failed to acquire write lock: {}", e))
+        })?;
 
         if optimizers.contains_key(&name) {
             return Err(DervflowError::InvalidInput(format!(

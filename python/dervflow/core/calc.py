@@ -133,4 +133,3 @@ def curl(field: ArrayLike, shape: Sequence[int], spacings: Sequence[float]) -> n
     result = _core().curl(arr, dims, spacing_arr)
     curl_arr = np.asarray(result, dtype=np.float64)
     return curl_arr.reshape(-1, 3)
-

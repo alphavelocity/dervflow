@@ -442,7 +442,10 @@ mod tests {
 
         let result = brent(f, 3.0, 5.0, &config);
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), DervflowError::InvalidInput(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            DervflowError::InvalidInput(_)
+        ));
     }
 
     #[test]
@@ -464,7 +467,10 @@ mod tests {
 
         let result = bisection(f, 3.0, 5.0, &config);
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), DervflowError::InvalidInput(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            DervflowError::InvalidInput(_)
+        ));
     }
 
     #[test]

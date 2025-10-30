@@ -13,8 +13,8 @@ This module provides shared fixtures and configuration for all test modules.
 import sys
 from pathlib import Path
 
-import pytest
 import numpy as np
+import pytest
 
 # Ensure the local Python package is importable without installation
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -30,12 +30,12 @@ else:
 def standard_option_params():
     """Standard option parameters for testing"""
     return {
-        'spot': 100.0,
-        'strike': 100.0,
-        'rate': 0.05,
-        'dividend': 0.0,
-        'volatility': 0.2,
-        'time': 1.0
+        "spot": 100.0,
+        "strike": 100.0,
+        "rate": 0.05,
+        "dividend": 0.0,
+        "volatility": 0.2,
+        "time": 1.0,
     }
 
 
@@ -43,13 +43,13 @@ def standard_option_params():
 def itm_call_params():
     """In-the-money call option parameters"""
     return {
-        'spot': 110.0,
-        'strike': 100.0,
-        'rate': 0.05,
-        'dividend': 0.0,
-        'volatility': 0.2,
-        'time': 1.0,
-        'option_type': 'call'
+        "spot": 110.0,
+        "strike": 100.0,
+        "rate": 0.05,
+        "dividend": 0.0,
+        "volatility": 0.2,
+        "time": 1.0,
+        "option_type": "call",
     }
 
 
@@ -57,13 +57,13 @@ def itm_call_params():
 def otm_put_params():
     """Out-of-the-money put option parameters"""
     return {
-        'spot': 110.0,
-        'strike': 100.0,
-        'rate': 0.05,
-        'dividend': 0.0,
-        'volatility': 0.2,
-        'time': 1.0,
-        'option_type': 'put'
+        "spot": 110.0,
+        "strike": 100.0,
+        "rate": 0.05,
+        "dividend": 0.0,
+        "volatility": 0.2,
+        "time": 1.0,
+        "option_type": "put",
     }
 
 
@@ -92,23 +92,19 @@ def correlation_matrix_2d():
 @pytest.fixture
 def correlation_matrix_3d():
     """3x3 correlation matrix"""
-    return np.array([
-        [1.0, 0.6, 0.3],
-        [0.6, 1.0, 0.4],
-        [0.3, 0.4, 1.0]
-    ])
+    return np.array([[1.0, 0.6, 0.3], [0.6, 1.0, 0.4], [0.3, 0.4, 1.0]])
 
 
 @pytest.fixture
 def sample_bond_data():
     """Sample bond data for yield curve construction"""
     return [
-        {'maturity': 0.25, 'rate': 0.02},
-        {'maturity': 0.5, 'rate': 0.025},
-        {'maturity': 1.0, 'rate': 0.03},
-        {'maturity': 2.0, 'rate': 0.035},
-        {'maturity': 5.0, 'rate': 0.04},
-        {'maturity': 10.0, 'rate': 0.045}
+        {"maturity": 0.25, "rate": 0.02},
+        {"maturity": 0.5, "rate": 0.025},
+        {"maturity": 1.0, "rate": 0.03},
+        {"maturity": 2.0, "rate": 0.035},
+        {"maturity": 5.0, "rate": 0.04},
+        {"maturity": 10.0, "rate": 0.045},
     ]
 
 

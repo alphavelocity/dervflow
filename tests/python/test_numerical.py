@@ -11,23 +11,14 @@ import math
 import numpy as np
 import pytest
 
-from dervflow.numerical import (
-    AdaptiveGaussLegendreIntegrator,
-    AdaptiveSimpsonsIntegrator,
-    BFGSOptimizer,
-    BisectionSolver,
-    BrentSolver,
-    GaussLegendreIntegrator,
-    GradientDescentOptimizer,
-    HaltonSequence,
-    LinearAlgebra,
-    NelderMeadOptimizer,
-    NewtonRaphsonSolver,
-    RandomGenerator,
-    SecantSolver,
-    SobolSequence,
-    ThreadLocalRandom,
-)
+from dervflow.numerical import (AdaptiveGaussLegendreIntegrator,
+                                AdaptiveSimpsonsIntegrator, BFGSOptimizer,
+                                BisectionSolver, BrentSolver,
+                                GaussLegendreIntegrator,
+                                GradientDescentOptimizer, HaltonSequence,
+                                LinearAlgebra, NelderMeadOptimizer,
+                                NewtonRaphsonSolver, RandomGenerator,
+                                SecantSolver, SobolSequence, ThreadLocalRandom)
 
 
 def test_integration_algorithms_agree():

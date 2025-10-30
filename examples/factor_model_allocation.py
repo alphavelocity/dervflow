@@ -1,16 +1,11 @@
 """Multi-factor analysis and portfolio construction example."""
 
-
 from __future__ import annotations
 
 import numpy as np
 
-from dervflow.portfolio import (
-    BlackLittermanModel,
-    FactorModel,
-    InvestorViews,
-    PortfolioOptimizer,
-)
+from dervflow.portfolio import (BlackLittermanModel, FactorModel,
+                                InvestorViews, PortfolioOptimizer)
 
 
 def simulate_monthly_data(seed: int = 7):
@@ -20,20 +15,24 @@ def simulate_monthly_data(seed: int = 7):
     periods = 120  # 10 years of monthly data
     factor_means = np.array([0.0050, 0.0020, 0.0015])
     factor_vols = np.array([0.035, 0.020, 0.018])
-    factor_corr = np.array([
-        [1.00, 0.30, 0.20],
-        [0.30, 1.00, 0.35],
-        [0.20, 0.35, 1.00],
-    ])
+    factor_corr = np.array(
+        [
+            [1.00, 0.30, 0.20],
+            [0.30, 1.00, 0.35],
+            [0.20, 0.35, 1.00],
+        ]
+    )
     factor_cov = np.outer(factor_vols, factor_vols) * factor_corr
     factor_returns = rng.multivariate_normal(factor_means, factor_cov, size=periods)
 
-    betas = np.array([
-        [1.05, 0.15, 0.05],
-        [0.90, -0.05, 0.25],
-        [1.10, 0.30, 0.10],
-        [0.80, 0.40, -0.02],
-    ])
+    betas = np.array(
+        [
+            [1.05, 0.15, 0.05],
+            [0.90, -0.05, 0.25],
+            [1.10, 0.30, 0.10],
+            [0.80, 0.40, -0.02],
+        ]
+    )
     alpha = np.array([0.0010, 0.0008, 0.0012, 0.0010])
     idio_vol = np.array([0.020, 0.018, 0.025, 0.020])
     noise = rng.normal(scale=idio_vol, size=(periods, betas.shape[0]))
@@ -54,7 +53,9 @@ def run_factor_model(asset_returns, factor_returns, factor_premia):
     print("=" * 76)
     print("Multi-factor regression diagnostics")
     print("=" * 76)
-    for idx, (beta, alpha, r2, resid) in enumerate(zip(exposures, alphas, r_squared, residual_vol), start=1):
+    for idx, (beta, alpha, r2, resid) in enumerate(
+        zip(exposures, alphas, r_squared, residual_vol), start=1
+    ):
         print(
             f"Asset {idx}: betas={beta}, alpha={alpha:+.5f}, R^2={r2:.3f}, residual vol={resid:.4f}"
         )
@@ -104,10 +105,12 @@ def black_litterman_update(asset_returns, prior_weights, posterior_view=0.006):
 
     bl = BlackLittermanModel(prior_weights, annual_cov, tau=0.05, risk_aversion=3.0)
 
-    pick = np.array([
-        [1.0, -1.0, 0.0, 0.0],   # Asset 1 expected to outperform Asset 2 by 60 bps annually
-        [0.0, 0.0, 0.0, 1.0],    # Absolute view on Asset 4's expected return
-    ])
+    pick = np.array(
+        [
+            [1.0, -1.0, 0.0, 0.0],  # Asset 1 expected to outperform Asset 2 by 60 bps annually
+            [0.0, 0.0, 0.0, 1.0],  # Absolute view on Asset 4's expected return
+        ]
+    )
     q = np.array([posterior_view, 0.05])  # annualised view returns
     uncertainty = np.diag([0.0009, 0.0025])
     views = InvestorViews(pick, q).with_uncertainty(uncertainty)

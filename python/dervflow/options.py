@@ -41,7 +41,7 @@ Features
 Examples
 --------
 >>> from dervflow.options import BlackScholesModel
->>> 
+>>>
 >>> # Price a European call option
 >>> bs = BlackScholesModel()
 >>> price = bs.price(
@@ -119,38 +119,26 @@ Examples
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from dervflow._dervflow import (
-        AsianOption,
-        BarrierOption,
-        BinomialTreeModel,
-        DigitalOption,
-        LookbackOption,
-        MonteCarloOptionPricer,
-        BlackScholesModel,
-        SABRModel,
-        VolatilitySurface,
-    )
+    from dervflow._dervflow import (AsianOption, BarrierOption,
+                                    BinomialTreeModel, BlackScholesModel,
+                                    DigitalOption, LookbackOption,
+                                    MonteCarloOptionPricer, SABRModel,
+                                    VolatilitySurface)
 else:
-    from dervflow._dervflow import (
-        AsianOption,
-        BarrierOption,
-        BinomialTreeModel,
-        DigitalOption,
-        LookbackOption,
-        MonteCarloOptionPricer,
-        BlackScholesModel,
-        SABRModel,
-        VolatilitySurface,
-    )
+    from dervflow._dervflow import (AsianOption, BarrierOption,
+                                    BinomialTreeModel, BlackScholesModel,
+                                    DigitalOption, LookbackOption,
+                                    MonteCarloOptionPricer, SABRModel,
+                                    VolatilitySurface)
 
 __all__ = [
-    'BlackScholesModel',
-    'BinomialTreeModel',
-    'MonteCarloOptionPricer',
-    'AsianOption',
-    'BarrierOption',
-    'LookbackOption',
-    'DigitalOption',
-    'VolatilitySurface',
-    'SABRModel',
+    "BlackScholesModel",
+    "BinomialTreeModel",
+    "MonteCarloOptionPricer",
+    "AsianOption",
+    "BarrierOption",
+    "LookbackOption",
+    "DigitalOption",
+    "VolatilitySurface",
+    "SABRModel",
 ]

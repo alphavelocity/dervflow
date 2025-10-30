@@ -62,7 +62,9 @@ def analyze_corporate_bond(curve):
     price = sum(amount * curve.discount_factor(time) for time, amount in cashflows)
     yield_to_maturity = analytics.yield_to_maturity(price, cashflows)
     macaulay_duration = analytics.macaulay_duration(yield_to_maturity, cashflows)
-    modified_duration = analytics.modified_duration(yield_to_maturity, cashflows, frequency=frequency)
+    modified_duration = analytics.modified_duration(
+        yield_to_maturity, cashflows, frequency=frequency
+    )
     convexity = analytics.convexity(yield_to_maturity, cashflows)
     dv01 = analytics.dv01(yield_to_maturity, cashflows)
 

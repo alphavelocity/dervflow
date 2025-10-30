@@ -77,13 +77,13 @@ pub fn falling_factorial(n: u64, k: u64) -> Result<u128> {
 pub fn rising_factorial(n: u64, k: u64) -> Result<u128> {
     let mut result = 1u128;
     for i in 0..k {
-        let addend = n
-            .checked_add(i)
-            .ok_or_else(|| DervflowError::NumericalError("Rising factorial overflow".to_string()))?;
+        let addend = n.checked_add(i).ok_or_else(|| {
+            DervflowError::NumericalError("Rising factorial overflow".to_string())
+        })?;
         let factor = addend as u128;
-        result = result
-            .checked_mul(factor)
-            .ok_or_else(|| DervflowError::NumericalError("Rising factorial overflow".to_string()))?;
+        result = result.checked_mul(factor).ok_or_else(|| {
+            DervflowError::NumericalError("Rising factorial overflow".to_string())
+        })?;
     }
     Ok(result)
 }

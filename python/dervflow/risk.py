@@ -35,7 +35,7 @@ Examples
 --------
 >>> import numpy as np
 >>> from dervflow.risk import GreeksCalculator, RiskMetrics
->>> 
+>>>
 >>> # Calculate Greeks for a single option
 >>> greeks_calc = GreeksCalculator()
 >>> greeks = greeks_calc.calculate(
@@ -97,6 +97,6 @@ else:
     from dervflow._dervflow import GreeksCalculator, RiskMetrics
 
 __all__ = [
-    'GreeksCalculator',
-    'RiskMetrics',
+    "GreeksCalculator",
+    "RiskMetrics",
 ]

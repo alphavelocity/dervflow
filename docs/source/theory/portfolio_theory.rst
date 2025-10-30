@@ -145,7 +145,7 @@ The efficient frontier forms a hyperbola in :math:`(\sigma_p, \mu_p)` space:
    # Plot
    risks = [p['volatility'] for p in frontier]
    returns_ef = [p['expected_return'] for p in frontier]
-   
+
    plt.plot(risks, returns_ef, 'b-', linewidth=2)
    plt.xlabel('Volatility (Risk)')
    plt.ylabel('Expected Return')
@@ -297,7 +297,7 @@ or equivalently:
    result = optimizer.risk_parity()
 
    print(f"Risk parity weights: {result['weights']}")
-   
+
    # Verify equal risk contribution
    for i, rc in enumerate(result['risk_contributions']):
        print(f"Asset {i+1} risk contribution: {rc:.4f}")
@@ -406,13 +406,13 @@ where :math:`V_t` is the portfolio value at time :math:`t`.
    import numpy as np
 
    returns = np.random.randn(252) * 0.02 + 0.0005
-   
+
    risk_metrics = dervflow.RiskMetrics()
-   
+
    sharpe = risk_metrics.sharpe_ratio(returns, rf_rate=0.02)
    sortino = risk_metrics.sortino_ratio(returns, rf_rate=0.02)
    max_dd = risk_metrics.max_drawdown(returns)
-   
+
    print(f"Sharpe Ratio: {sharpe:.2f}")
    print(f"Sortino Ratio: {sortino:.2f}")
    print(f"Maximum Drawdown: {max_dd:.2%}")

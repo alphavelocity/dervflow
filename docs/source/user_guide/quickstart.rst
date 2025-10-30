@@ -70,7 +70,7 @@ For pricing multiple options efficiently:
        times,
        option_types,
    )
-   
+
    for strike, price in zip(strikes, prices):
        print(f"Strike ${strike:.0f}: ${price:.2f}")
 
@@ -118,7 +118,7 @@ Calculate implied volatility from market prices:
        time=1.0,
        option_type='call'
    )
-   
+
    print(f"Implied volatility: {iv:.2%}")
 
 Monte Carlo Simulation

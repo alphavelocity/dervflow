@@ -65,9 +65,9 @@ where :math:`k = \lfloor n(1-\alpha) \rfloor` and :math:`r_{(k)}` is the :math:`
    import numpy as np
 
    # Historical returns
-   returns = np.array([-0.05, -0.03, -0.02, -0.01, 0.00, 
+   returns = np.array([-0.05, -0.03, -0.02, -0.01, 0.00,
                        0.01, 0.02, 0.03, 0.04, 0.05])
-   
+
    risk_metrics = dervflow.RiskMetrics()
    var_95 = risk_metrics.var(returns, confidence=0.95, method='historical')
    print(f"95% VaR: {var_95:.2%}")
@@ -125,7 +125,7 @@ where :math:`S` is skewness and :math:`K` is kurtosis.
    import numpy as np
 
    returns = np.random.randn(1000) * 0.02  # 2% daily volatility
-   
+
    risk_metrics = dervflow.RiskMetrics()
    var_95 = risk_metrics.var(returns, confidence=0.95, method='parametric')
    print(f"95% VaR (Parametric): {var_95:.2%}")
@@ -164,15 +164,15 @@ Simulate future portfolio values using stochastic models.
 
    # Simulate returns using Monte Carlo
    mc_engine = dervflow.MonteCarloEngine()
-   
+
    # Simulate GBM paths
    paths = mc_engine.simulate_gbm(
-       s0=100, mu=0.05, sigma=0.2, 
+       s0=100, mu=0.05, sigma=0.2,
        T=1/252, steps=1, paths=10000
    )
-   
+
    returns = (paths[-1, :] - 100) / 100
-   
+
    risk_metrics = dervflow.RiskMetrics()
    var_95 = risk_metrics.var(returns, confidence=0.95, method='monte_carlo')
    print(f"95% VaR (Monte Carlo): {var_95:.2%}")
@@ -208,11 +208,11 @@ For historical simulation:
    import numpy as np
 
    returns = np.random.randn(1000) * 0.02
-   
+
    risk_metrics = dervflow.RiskMetrics()
    var_95 = risk_metrics.var(returns, confidence=0.95)
    cvar_95 = risk_metrics.cvar(returns, confidence=0.95)
-   
+
    print(f"95% VaR: {var_95:.2%}")
    print(f"95% CVaR: {cvar_95:.2%}")
 
@@ -261,25 +261,25 @@ Most accurate method: reprice the entire portfolio for each scenario.
 
    # Portfolio with options
    bs_model = dervflow.BlackScholesModel()
-   
+
    # Current portfolio value
    spot = 100
    option_price = bs_model.price(spot, 100, 0.05, 0, 0.25, 1, 'call')
    portfolio_value = 100 * option_price  # 100 options
-   
+
    # Simulate spot price scenarios
    scenarios = np.random.lognormal(
        mean=np.log(spot) - 0.5 * 0.25**2 / 252,
        sigma=0.25 / np.sqrt(252),
        size=10000
    )
-   
+
    # Reprice portfolio for each scenario
    portfolio_values = np.array([
        100 * bs_model.price(s, 100, 0.05, 0, 0.25, 1 - 1/252, 'call')
        for s in scenarios
    ])
-   
+
    returns = (portfolio_values - portfolio_value) / portfolio_value
    var_95 = -np.percentile(returns, 5)
    print(f"95% VaR: {var_95:.2%}")
@@ -347,21 +347,21 @@ Under the null hypothesis, :math:`LR \sim \chi^2(1)`.
    # Simulate returns and VaR predictions
    returns = np.random.randn(250) * 0.02
    var_predictions = np.full(250, 0.033)  # 95% VaR prediction
-   
+
    # Count violations
    violations = np.sum(returns < -var_predictions)
    violation_ratio = violations / len(returns)
-   
+
    print(f"Violations: {violations} ({violation_ratio:.2%})")
    print(f"Expected: {0.05 * len(returns):.0f} (5%)")
-   
+
    # Kupiec test
    T = len(returns)
    N = violations
    alpha = 0.05
-   
+
    if N > 0 and N < T:
-       LR = -2 * (np.log((1-alpha)**(T-N) * alpha**N) - 
+       LR = -2 * (np.log((1-alpha)**(T-N) * alpha**N) -
                   np.log((1-N/T)**(T-N) * (N/T)**N))
        p_value = 1 - stats.chi2.cdf(LR, df=1)
        print(f"Kupiec test p-value: {p_value:.4f}")
