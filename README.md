@@ -1,4 +1,8 @@
-# DervFlow
+<h1 align="center">
+
+DervFlow
+
+</h1>
 
 High-performance mathematics & quantitative finance toolkit written in Rust with first-class Python bindings. DervFlow delivers production-ready option pricers, risk analytics, portfolio construction utilities, time-series diagnostics, and yield-curve analytics backed by rigorously tested numerical kernels.
 
@@ -257,20 +261,11 @@ mypy python/dervflow
 ```
 If linking against CPython fails when building with the `python` feature, install the appropriate `python3.x-dev` package and export `PYO3_PYTHON` to the desired interpreter before invoking `cargo`.
 
-## Examples and documentation
-- **Examples** – runnable scripts live in [`examples/`](examples/). Launch `python examples/basic_pricing.py`.
-- **Documentation** – build the Sphinx docs:
-  ```bash
-  cd docs
-  make html
-  ```
-  The generated site is available at `docs/build/html/index.html`.
-
 ## License
-Apache License 2.0. See [LICENSE](LICENSE).
+This project is licensed under the Apache License - see the [LICENSE](LICENSE) file for details.
 
 ## Citation
-If DervFlow is useful in academic work, please cite:
+If you use dervflow in your work and wish to refer to it, please use the following BibTeX entry.
 ```bibtex
 @software{dervflow,
   author = {Soumyadip Sarkar},

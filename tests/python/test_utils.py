@@ -359,36 +359,36 @@ def test_sortino_ratio_mismatched_inputs(returns, risk_free):
 
 
 @pytest.mark.parametrize(
-    "returns, benchmark",
+    "returns, benchmark_returns",
     [
         ([0.01, 0.02], [0.015]),
     ],
 )
-def test_tracking_error_mismatched_inputs(returns, benchmark):
+def test_tracking_error_mismatched_inputs(returns, benchmark_returns):
     with pytest.raises(ValueError):
-        utils.tracking_error(returns, benchmark)
+        utils.tracking_error(returns, benchmark_returns)
 
 
 @pytest.mark.parametrize(
-    "returns, benchmark",
+    "returns, benchmark_returns",
     [
         ([0.01], [0.008]),
     ],
 )
-def test_beta_requires_two_observations(returns, benchmark):
+def test_beta_requires_two_observations(returns, benchmark_returns):
     with pytest.raises(ValueError):
-        utils.beta(returns, benchmark)
+        utils.beta(returns, benchmark_returns)
 
 
 @pytest.mark.parametrize(
-    "returns, benchmark, risk_free",
+    "returns, benchmark_returns, risk_free",
     [
         ([0.01, 0.02], [0.015], 0.001),
     ],
 )
-def test_alpha_mismatched_inputs(returns, benchmark, risk_free):
+def test_alpha_mismatched_inputs(returns, benchmark_returns, risk_free):
     with pytest.raises(ValueError):
-        utils.alpha(returns, benchmark, risk_free)
+        utils.alpha(returns, benchmark_returns, risk_free)
 
 
 def test_value_at_risk_accepts_percentage_confidence():
