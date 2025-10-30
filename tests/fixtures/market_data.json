@@ -1,0 +1,83 @@
+{
+  "option_quotes": [
+    {
+      "spot": 268.015,
+      "strike": 267.5,
+      "rate": 0.04012,
+      "dividend": 0.0036,
+      "time": 0.060274,
+      "market_price": 8.2,
+      "option_type": "call"
+    },
+    {
+      "spot": 268.015,
+      "strike": 270.0,
+      "rate": 0.04012,
+      "dividend": 0.0036,
+      "time": 0.09863,
+      "market_price": 8.425,
+      "option_type": "call"
+    },
+    {
+      "spot": 268.015,
+      "strike": 265.0,
+      "rate": 0.04012,
+      "dividend": 0.0036,
+      "time": 0.09863,
+      "market_price": 11.1,
+      "option_type": "call"
+    }
+  ],
+  "bond_quotes": [
+    {
+      "maturity": 7.01,
+      "coupon": 0.0375,
+      "price": 99.756076,
+      "frequency": 2
+    },
+    {
+      "maturity": 2.0,
+      "coupon": 0.035,
+      "price": 99.992338,
+      "frequency": 2
+    },
+    {
+      "maturity": 5.0,
+      "coupon": 0.03625,
+      "price": 100.0,
+      "frequency": 2
+    }
+  ],
+  "historical_prices": {
+    "asset_1": [
+      213.572,
+      208.978,
+      206.795,
+      207.443,
+      208.369,
+      212.535,
+      213.382,
+      209.914
+    ],
+    "asset_2": [
+      444.647,
+      444.009,
+      448.074,
+      445.972,
+      449.24,
+      450.444,
+      451.132,
+      445.255
+    ],
+    "asset_3": [
+      541.598,
+      540.127,
+      539.403,
+      537.649,
+      539.719,
+      540.393,
+      541.245,
+      539.115
+    ]
+  }
+}
