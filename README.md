@@ -1,10 +1,10 @@
 <h1 align="center">
 
-DervFlow
+DervFlow: High-performance Mathematics & Quantitative Finance Toolkit
 
 </h1>
 
-High-performance mathematics & quantitative finance toolkit written in Rust with first-class Python bindings. DervFlow delivers production-ready option pricers, risk analytics, portfolio construction utilities, time-series diagnostics, and yield-curve analytics backed by rigorously tested numerical kernels.
+DervFlow delivers production-ready option pricers, risk analytics, portfolio construction utilities, time-series diagnostics, and yield-curve analytics backed by rigorously tested numerical kernels.
 
 <div align="center">
 
