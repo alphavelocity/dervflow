@@ -60,7 +60,6 @@ dev = [
     "pytest-benchmark",
     "mypy",
     "black",
-    "isort",
     "pre-commit",
 ]
 docs = [

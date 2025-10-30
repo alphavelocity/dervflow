@@ -11,10 +11,6 @@ repos:
     rev: 25.9.0
     hooks:
       - id: black
-  - repo: https://github.com/PyCQA/isort
-    rev: 7.0.0
-    hooks:
-      - id: isort
   - repo: local
     hooks:
       - id: cargo-fmt
