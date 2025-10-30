@@ -16,10 +16,18 @@ Tests complete workflows combining multiple modules:
 import numpy as np
 import pytest
 
-from dervflow import (BinomialTreeModel, BlackScholesModel, GreeksCalculator,
-                      MonteCarloEngine, MonteCarloOptionPricer,
-                      PortfolioOptimizer, RiskMetrics, TimeSeriesAnalyzer,
-                      YieldCurve, YieldCurveBuilder)
+from dervflow import (
+    BinomialTreeModel,
+    BlackScholesModel,
+    GreeksCalculator,
+    MonteCarloEngine,
+    MonteCarloOptionPricer,
+    PortfolioOptimizer,
+    RiskMetrics,
+    TimeSeriesAnalyzer,
+    YieldCurve,
+    YieldCurveBuilder,
+)
 
 
 class TestOptionPricingWorkflow:

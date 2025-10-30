@@ -11,9 +11,13 @@ Tests for portfolio optimization module
 import numpy as np
 import pytest
 
-from dervflow.portfolio import (BlackLittermanModel, FactorModel,
-                                InvestorViews, PortfolioOptimizer,
-                                RiskParityOptimizer)
+from dervflow.portfolio import (
+    BlackLittermanModel,
+    FactorModel,
+    InvestorViews,
+    PortfolioOptimizer,
+    RiskParityOptimizer,
+)
 
 
 class TestPortfolioOptimizer:

@@ -63,27 +63,47 @@ and provide ergonomic, NumPy-friendly APIs for Python users.
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from dervflow._dervflow import (AdaptiveGaussLegendreIntegrator,
-                                    AdaptiveSimpsonsIntegrator, BFGSOptimizer,
-                                    BisectionSolver, BrentSolver,
-                                    GaussLegendreIntegrator,
-                                    GradientDescentOptimizer, HaltonSequence,
-                                    IntegrationResult, LinearAlgebra,
-                                    NelderMeadOptimizer, NewtonRaphsonSolver,
-                                    OptimizationResult, RandomGenerator,
-                                    RootFindingResult, SecantSolver,
-                                    SobolSequence, ThreadLocalRandom)
+    from dervflow._dervflow import (
+        AdaptiveGaussLegendreIntegrator,
+        AdaptiveSimpsonsIntegrator,
+        BFGSOptimizer,
+        BisectionSolver,
+        BrentSolver,
+        GaussLegendreIntegrator,
+        GradientDescentOptimizer,
+        HaltonSequence,
+        IntegrationResult,
+        LinearAlgebra,
+        NelderMeadOptimizer,
+        NewtonRaphsonSolver,
+        OptimizationResult,
+        RandomGenerator,
+        RootFindingResult,
+        SecantSolver,
+        SobolSequence,
+        ThreadLocalRandom,
+    )
 else:
-    from dervflow._dervflow import (AdaptiveGaussLegendreIntegrator,
-                                    AdaptiveSimpsonsIntegrator, BFGSOptimizer,
-                                    BisectionSolver, BrentSolver,
-                                    GaussLegendreIntegrator,
-                                    GradientDescentOptimizer, HaltonSequence,
-                                    IntegrationResult, LinearAlgebra,
-                                    NelderMeadOptimizer, NewtonRaphsonSolver,
-                                    OptimizationResult, RandomGenerator,
-                                    RootFindingResult, SecantSolver,
-                                    SobolSequence, ThreadLocalRandom)
+    from dervflow._dervflow import (
+        AdaptiveGaussLegendreIntegrator,
+        AdaptiveSimpsonsIntegrator,
+        BFGSOptimizer,
+        BisectionSolver,
+        BrentSolver,
+        GaussLegendreIntegrator,
+        GradientDescentOptimizer,
+        HaltonSequence,
+        IntegrationResult,
+        LinearAlgebra,
+        NelderMeadOptimizer,
+        NewtonRaphsonSolver,
+        OptimizationResult,
+        RandomGenerator,
+        RootFindingResult,
+        SecantSolver,
+        SobolSequence,
+        ThreadLocalRandom,
+    )
 
 __all__ = [
     "AdaptiveSimpsonsIntegrator",

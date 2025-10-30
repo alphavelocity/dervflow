@@ -17,8 +17,7 @@ This script demonstrates basic option pricing using dervflow including:
 
 import numpy as np
 
-from dervflow import (BinomialTreeModel, BlackScholesModel,
-                      MonteCarloOptionPricer)
+from dervflow import BinomialTreeModel, BlackScholesModel, MonteCarloOptionPricer
 
 
 def black_scholes_example():

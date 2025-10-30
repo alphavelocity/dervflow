@@ -70,28 +70,55 @@ Examples
 __version__ = "0.1.0"
 
 # Import core Rust classes from the compiled extension
-from dervflow._dervflow import (AsianOption, BarrierOption, BinomialTreeModel,
-                                BlackScholesModel, BondAnalytics,
-                                DigitalOption, GreeksCalculator,
-                                LookbackOption, MonteCarloEngine,
-                                MonteCarloOptionPricer, MultiCurve,
-                                RiskMetrics, SABRModel, SwapPeriod,
-                                TimeSeriesAnalyzer, VolatilitySurface,
-                                YieldCurve, YieldCurveBuilder)
-from dervflow.numerical import (AdaptiveGaussLegendreIntegrator,
-                                AdaptiveSimpsonsIntegrator, BFGSOptimizer,
-                                BisectionSolver, BrentSolver,
-                                GaussLegendreIntegrator,
-                                GradientDescentOptimizer, HaltonSequence,
-                                IntegrationResult, LinearAlgebra,
-                                NelderMeadOptimizer, NewtonRaphsonSolver,
-                                OptimizationResult, RandomGenerator,
-                                RootFindingResult, SecantSolver, SobolSequence,
-                                ThreadLocalRandom)
+from dervflow._dervflow import (
+    AsianOption,
+    BarrierOption,
+    BinomialTreeModel,
+    BlackScholesModel,
+    BondAnalytics,
+    DigitalOption,
+    GreeksCalculator,
+    LookbackOption,
+    MonteCarloEngine,
+    MonteCarloOptionPricer,
+    MultiCurve,
+    RiskMetrics,
+    SABRModel,
+    SwapPeriod,
+    TimeSeriesAnalyzer,
+    VolatilitySurface,
+    YieldCurve,
+    YieldCurveBuilder,
+)
+from dervflow.numerical import (
+    AdaptiveGaussLegendreIntegrator,
+    AdaptiveSimpsonsIntegrator,
+    BFGSOptimizer,
+    BisectionSolver,
+    BrentSolver,
+    GaussLegendreIntegrator,
+    GradientDescentOptimizer,
+    HaltonSequence,
+    IntegrationResult,
+    LinearAlgebra,
+    NelderMeadOptimizer,
+    NewtonRaphsonSolver,
+    OptimizationResult,
+    RandomGenerator,
+    RootFindingResult,
+    SecantSolver,
+    SobolSequence,
+    ThreadLocalRandom,
+)
+
 # Import Python wrapper classes
-from dervflow.portfolio import (BlackLittermanModel, FactorModel,
-                                InvestorViews, PortfolioOptimizer,
-                                RiskParityOptimizer)
+from dervflow.portfolio import (
+    BlackLittermanModel,
+    FactorModel,
+    InvestorViews,
+    PortfolioOptimizer,
+    RiskParityOptimizer,
+)
 
 from . import core as core
 from . import utils as utils

@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from dervflow.portfolio import (BlackLittermanModel, FactorModel,
-                                InvestorViews, PortfolioOptimizer)
+from dervflow.portfolio import BlackLittermanModel, FactorModel, InvestorViews, PortfolioOptimizer
 
 
 def simulate_monthly_data(seed: int = 7):

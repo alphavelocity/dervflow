@@ -13,12 +13,16 @@ import numpy as np
 import pytest
 
 from dervflow.monte_carlo import MonteCarloEngine
-from dervflow.numerical import (AdaptiveSimpsonsIntegrator, BisectionSolver,
-                                BrentSolver, GradientDescentOptimizer,
-                                NelderMeadOptimizer, NewtonRaphsonSolver,
-                                SecantSolver)
-from dervflow.options import (BinomialTreeModel, BlackScholesModel, SABRModel,
-                              VolatilitySurface)
+from dervflow.numerical import (
+    AdaptiveSimpsonsIntegrator,
+    BisectionSolver,
+    BrentSolver,
+    GradientDescentOptimizer,
+    NelderMeadOptimizer,
+    NewtonRaphsonSolver,
+    SecantSolver,
+)
+from dervflow.options import BinomialTreeModel, BlackScholesModel, SABRModel, VolatilitySurface
 from dervflow.portfolio import PortfolioOptimizer
 from dervflow.risk import GreeksCalculator, RiskMetrics
 from dervflow.timeseries import TimeSeriesAnalyzer
@@ -670,8 +674,7 @@ class TestRequirement8PythonAPI:
     def test_8_1_expose_all_functionality(self):
         """8.1: Expose all Rust functionality through Python"""
         # Verify main modules are importable
-        from dervflow import (monte_carlo, options, portfolio, risk,
-                              timeseries, yield_curve)
+        from dervflow import monte_carlo, options, portfolio, risk, timeseries, yield_curve
 
         assert hasattr(options, "BlackScholesModel")
         assert hasattr(risk, "GreeksCalculator")

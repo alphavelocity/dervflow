@@ -17,8 +17,7 @@ Tests cover:
 import numpy as np
 import pytest
 
-from dervflow import (BinomialTreeModel, BlackScholesModel,
-                      MonteCarloOptionPricer)
+from dervflow import BinomialTreeModel, BlackScholesModel, MonteCarloOptionPricer
 
 
 class TestBlackScholesPricing:
@@ -2878,8 +2877,13 @@ class TestExoticOptionsIntegration:
 
     def setup_method(self):
         """Set up test fixtures"""
-        from dervflow import (AsianOption, BarrierOption, BlackScholesModel,
-                              DigitalOption, LookbackOption)
+        from dervflow import (
+            AsianOption,
+            BarrierOption,
+            BlackScholesModel,
+            DigitalOption,
+            LookbackOption,
+        )
 
         self.asian = AsianOption()
         self.barrier = BarrierOption()

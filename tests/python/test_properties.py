@@ -17,8 +17,7 @@ Tests mathematical invariants and relationships that should hold for all valid i
 import numpy as np
 import pytest
 
-from dervflow import (BinomialTreeModel, BlackScholesModel,
-                      MonteCarloOptionPricer)
+from dervflow import BinomialTreeModel, BlackScholesModel, MonteCarloOptionPricer
 
 
 class TestPutCallParity:
