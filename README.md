@@ -1,8 +1,14 @@
 <h1 align="center">
 
-DervFlow: High-performance Mathematics & Quantitative Finance Toolkit
+DervFlow
 
 </h1>
+
+<h3 align="center">
+
+High-performance Mathematics & Quantitative Finance Toolkit
+
+</h3>
 
 DervFlow delivers production-ready option pricers, risk analytics, portfolio construction utilities, time-series diagnostics, and yield-curve analytics backed by rigorously tested numerical kernels.
 
@@ -261,9 +267,6 @@ mypy python/dervflow
 ```
 If linking against CPython fails when building with the `python` feature, install the appropriate `python3.x-dev` package and export `PYO3_PYTHON` to the desired interpreter before invoking `cargo`.
 
-## License
-This project is licensed under the Apache License - see the [LICENSE](LICENSE) file for details.
-
 ## Citation
 If you use dervflow in your work and wish to refer to it, please use the following BibTeX entry.
 ```bibtex
@@ -274,3 +277,6 @@ If you use dervflow in your work and wish to refer to it, please use the followi
   url = {https://github.com/neuralsorcerer/dervflow}
 }
 ```
+
+## License
+This project is licensed under the Apache License - see the [LICENSE](LICENSE) file for details.
