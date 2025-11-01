@@ -6,7 +6,7 @@ DervFlow
 
 <h3 align="center">
 
-High-performance Mathematics & Quantitative Finance Toolkit
+A Lightweight, High-Performance Mathematics & Quantitative Finance Toolkit
 
 </h3>
 
@@ -272,7 +272,7 @@ If you use dervflow in your work and wish to refer to it, please use the followi
 ```bibtex
 @software{dervflow,
   author = {Soumyadip Sarkar},
-  title = {DervFlow: High-Performance Quantitative Finance Library},
+  title = {DervFlow: A Lightweight, High-Performance Mathematics & Quantitative Finance Toolkit},
   year = {2025},
   url = {https://github.com/neuralsorcerer/dervflow}
 }

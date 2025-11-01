@@ -21,8 +21,15 @@ __all__ = [
     "definite_integral",
     "cumulative_integral",
     "gradient",
+    "normalized_gradient",
+    "gradient_magnitude",
+    "directional_derivative",
     "divergence",
     "curl",
+    "laplacian",
+    "vector_laplacian",
+    "jacobian",
+    "hessian",
 ]
 
 
@@ -106,6 +113,60 @@ def gradient(values: ArrayLike, shape: Sequence[int], spacings: Sequence[float])
     return gradient_arr.reshape(-1, len(dims))
 
 
+def normalized_gradient(
+    values: ArrayLike, shape: Sequence[int], spacings: Sequence[float]
+) -> np.ndarray:
+    """Return unit vectors pointing in the direction of steepest ascent."""
+
+    arr = _as_array("values", values)
+    dims = _validate_shape(shape)
+    spacing_arr = _validate_spacings(spacings, len(dims))
+
+    result = _core().normalized_gradient(arr, dims, spacing_arr)
+    normalized_arr = np.asarray(result, dtype=np.float64)
+    return normalized_arr.reshape(-1, len(dims))
+
+
+def gradient_magnitude(values: ArrayLike, shape: Sequence[int], spacings: Sequence[float]) -> np.ndarray:
+    """Return the magnitude of the gradient of a scalar field."""
+
+    arr = _as_array("values", values)
+    dims = _validate_shape(shape)
+    spacing_arr = _validate_spacings(spacings, len(dims))
+
+    result = _core().gradient_magnitude(arr, dims, spacing_arr)
+    magnitude_arr = np.asarray(result, dtype=np.float64)
+    return magnitude_arr.reshape(tuple(dims))
+
+
+def directional_derivative(
+    values: ArrayLike,
+    shape: Sequence[int],
+    spacings: Sequence[float],
+    direction: Sequence[float],
+) -> np.ndarray:
+    """Return the directional derivative of a scalar field along *direction*."""
+
+    arr = _as_array("values", values)
+    dims = _validate_shape(shape)
+    spacing_arr = _validate_spacings(spacings, len(dims))
+
+    direction_arr = np.asarray(direction, dtype=np.float64)
+    if direction_arr.ndim != 1:
+        raise ValueError("direction must be a one-dimensional sequence")
+    if direction_arr.size != len(dims):
+        raise ValueError("direction length must match the number of dimensions")
+    if not np.all(np.isfinite(direction_arr)):
+        raise ValueError("direction must contain only finite values")
+    if float(np.linalg.norm(direction_arr)) == 0.0:
+        raise ValueError("direction must have non-zero magnitude")
+
+    direction_arr = np.ascontiguousarray(direction_arr, dtype=np.float64)
+    result = _core().directional_derivative(arr, dims, spacing_arr, direction_arr)
+    derivative_arr = np.asarray(result, dtype=np.float64)
+    return derivative_arr.reshape(tuple(dims))
+
+
 def divergence(
     field: ArrayLike,
     shape: Sequence[int],
@@ -133,3 +194,63 @@ def curl(field: ArrayLike, shape: Sequence[int], spacings: Sequence[float]) -> n
     result = _core().curl(arr, dims, spacing_arr)
     curl_arr = np.asarray(result, dtype=np.float64)
     return curl_arr.reshape(-1, 3)
+
+
+def laplacian(values: ArrayLike, shape: Sequence[int], spacings: Sequence[float]) -> np.ndarray:
+    """Return the discrete Laplacian of a scalar field on a regular grid."""
+
+    arr = _as_array("values", values)
+    dims = _validate_shape(shape)
+    spacing_arr = _validate_spacings(spacings, len(dims))
+
+    result = _core().laplacian(arr, dims, spacing_arr)
+    return np.asarray(result, dtype=np.float64)
+
+
+def vector_laplacian(
+    field: ArrayLike, shape: Sequence[int], spacings: Sequence[float]
+) -> np.ndarray:
+    """Return the Laplacian of each component of a vector field."""
+
+    arr = _as_array("field", field)
+    dims = _validate_shape(shape)
+    spacing_arr = _validate_spacings(spacings, len(dims))
+
+    total_points = int(np.prod(dims, dtype=int))
+    if arr.size != total_points * len(dims):
+        raise ValueError("field length must equal number of grid points times dimensions")
+
+    result = _core().vector_laplacian(arr, dims, spacing_arr)
+    return np.asarray(result, dtype=np.float64)
+
+
+def jacobian(field: ArrayLike, shape: Sequence[int], spacings: Sequence[float]) -> np.ndarray:
+    """Return the Jacobian matrices for a vector field sampled on a grid."""
+
+    arr = _as_array("field", field)
+    dims = _validate_shape(shape)
+    spacing_arr = _validate_spacings(spacings, len(dims))
+
+    total_points = int(np.prod(dims, dtype=int))
+    if total_points == 0:
+        raise ValueError("shape must contain at least one grid point")
+    if arr.size % total_points != 0:
+        raise ValueError("field length must be a multiple of the number of grid points")
+
+    result = _core().jacobian(arr, dims, spacing_arr)
+    components = arr.size // total_points
+    jacobian_arr = np.asarray(result, dtype=np.float64)
+    return jacobian_arr.reshape(total_points, components, len(dims))
+
+
+def hessian(values: ArrayLike, shape: Sequence[int], spacings: Sequence[float]) -> np.ndarray:
+    """Return the Hessian matrices for a scalar field sampled on a grid."""
+
+    arr = _as_array("values", values)
+    dims = _validate_shape(shape)
+    spacing_arr = _validate_spacings(spacings, len(dims))
+
+    result = _core().hessian(arr, dims, spacing_arr)
+    total_points = int(np.prod(dims, dtype=int))
+    hessian_arr = np.asarray(result, dtype=np.float64)
+    return hessian_arr.reshape(total_points, len(dims), len(dims))

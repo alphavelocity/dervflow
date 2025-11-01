@@ -15,8 +15,15 @@ from .calc import (
     curl,
     definite_integral,
     derivative,
+    directional_derivative,
     divergence,
     gradient,
+    normalized_gradient,
+    gradient_magnitude,
+    hessian,
+    jacobian,
+    laplacian,
+    vector_laplacian,
     second_derivative,
 )
 from .combinatorics import (
@@ -139,14 +146,18 @@ __all__ = [
     "definite_integral",
     "cumulative_integral",
     "gradient",
+    "normalized_gradient",
+    "gradient_magnitude",
+    "directional_derivative",
     "divergence",
     "curl",
+    "laplacian",
+    "vector_laplacian",
+    "jacobian",
+    "hessian",
     "stat",
     "vectors",
     "series",
     "combinatorics",
     "calc",
 ]
-
-# ``skewness`` is implemented in ``stat`` but exposed here for a
-# convenient flat namespace.

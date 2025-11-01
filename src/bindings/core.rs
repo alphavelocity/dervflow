@@ -10,8 +10,11 @@ use crate::common::error::DervflowError;
 use crate::core::calc::{
     cumulative_integral as cumulative_integral_fn, curl as curl_fn,
     definite_integral as definite_integral_fn, derivative as derivative_fn,
-    divergence as divergence_fn, gradient as gradient_fn,
-    second_derivative as second_derivative_fn,
+    directional_derivative as directional_derivative_fn, divergence as divergence_fn,
+    gradient as gradient_fn, gradient_magnitude as gradient_magnitude_fn, hessian as hessian_fn,
+    jacobian as jacobian_fn, laplacian as laplacian_fn,
+    normalized_gradient as normalized_gradient_fn, second_derivative as second_derivative_fn,
+    vector_laplacian as vector_laplacian_fn,
 };
 use crate::core::combinatorics::{
     bell_number as bell_number_fn, binomial_probability as binomial_probability_fn,
@@ -258,6 +261,51 @@ impl PyCore {
         Ok(PyArray1::from_vec(py, gradient))
     }
 
+    #[pyo3(signature = (values, shape, spacings))]
+    fn normalized_gradient<'py>(
+        &self,
+        py: Python<'py>,
+        values: PyReadonlyArray1<f64>,
+        shape: Vec<usize>,
+        spacings: PyReadonlyArray1<f64>,
+    ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+        let normalized = normalized_gradient_fn(values.as_slice()?, &shape, spacings.as_slice()?)
+            .map_err(to_py_err)?;
+        Ok(PyArray1::from_vec(py, normalized))
+    }
+
+    #[pyo3(signature = (values, shape, spacings))]
+    fn gradient_magnitude<'py>(
+        &self,
+        py: Python<'py>,
+        values: PyReadonlyArray1<f64>,
+        shape: Vec<usize>,
+        spacings: PyReadonlyArray1<f64>,
+    ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+        let magnitudes = gradient_magnitude_fn(values.as_slice()?, &shape, spacings.as_slice()?)
+            .map_err(to_py_err)?;
+        Ok(PyArray1::from_vec(py, magnitudes))
+    }
+
+    #[pyo3(signature = (values, shape, spacings, direction))]
+    fn directional_derivative<'py>(
+        &self,
+        py: Python<'py>,
+        values: PyReadonlyArray1<f64>,
+        shape: Vec<usize>,
+        spacings: PyReadonlyArray1<f64>,
+        direction: PyReadonlyArray1<f64>,
+    ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+        let derivative = directional_derivative_fn(
+            values.as_slice()?,
+            &shape,
+            spacings.as_slice()?,
+            direction.as_slice()?,
+        )
+        .map_err(to_py_err)?;
+        Ok(PyArray1::from_vec(py, derivative))
+    }
+
     #[pyo3(signature = (field, shape, spacings))]
     fn divergence<'py>(
         &self,
@@ -281,6 +329,58 @@ impl PyCore {
     ) -> PyResult<Bound<'py, PyArray1<f64>>> {
         let curl = curl_fn(field.as_slice()?, &shape, spacings.as_slice()?).map_err(to_py_err)?;
         Ok(PyArray1::from_vec(py, curl))
+    }
+
+    #[pyo3(signature = (values, shape, spacings))]
+    fn laplacian<'py>(
+        &self,
+        py: Python<'py>,
+        values: PyReadonlyArray1<f64>,
+        shape: Vec<usize>,
+        spacings: PyReadonlyArray1<f64>,
+    ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+        let laplacian =
+            laplacian_fn(values.as_slice()?, &shape, spacings.as_slice()?).map_err(to_py_err)?;
+        Ok(PyArray1::from_vec(py, laplacian))
+    }
+
+    #[pyo3(signature = (field, shape, spacings))]
+    fn vector_laplacian<'py>(
+        &self,
+        py: Python<'py>,
+        field: PyReadonlyArray1<f64>,
+        shape: Vec<usize>,
+        spacings: PyReadonlyArray1<f64>,
+    ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+        let vector_laplacian = vector_laplacian_fn(field.as_slice()?, &shape, spacings.as_slice()?)
+            .map_err(to_py_err)?;
+        Ok(PyArray1::from_vec(py, vector_laplacian))
+    }
+
+    #[pyo3(signature = (values, shape, spacings))]
+    fn hessian<'py>(
+        &self,
+        py: Python<'py>,
+        values: PyReadonlyArray1<f64>,
+        shape: Vec<usize>,
+        spacings: PyReadonlyArray1<f64>,
+    ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+        let hessian =
+            hessian_fn(values.as_slice()?, &shape, spacings.as_slice()?).map_err(to_py_err)?;
+        Ok(PyArray1::from_vec(py, hessian))
+    }
+
+    #[pyo3(signature = (field, shape, spacings))]
+    fn jacobian<'py>(
+        &self,
+        py: Python<'py>,
+        field: PyReadonlyArray1<f64>,
+        shape: Vec<usize>,
+        spacings: PyReadonlyArray1<f64>,
+    ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+        let jacobian =
+            jacobian_fn(field.as_slice()?, &shape, spacings.as_slice()?).map_err(to_py_err)?;
+        Ok(PyArray1::from_vec(py, jacobian))
     }
 
     fn vector_add<'py>(

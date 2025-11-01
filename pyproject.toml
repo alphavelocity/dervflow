@@ -5,7 +5,7 @@ build-backend = "maturin"
 [project]
 name = "dervflow"
 version = "0.1.0"
-description = "High-performance mathematics & quantitative finance library"
+description = "A Lightweight, High-Performance Mathematics & Quantitative Finance Toolkit"
 readme = "README.md"
 requires-python = ">=3.10,<3.15"
 license = { text = "Apache-2.0" }
