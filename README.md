@@ -10,17 +10,21 @@ A Lightweight, High-Performance Mathematics & Quantitative Finance Toolkit
 
 </h3>
 
+<div align="center">
+
 DervFlow delivers production-ready option pricers, risk analytics, portfolio construction utilities, time-series diagnostics, and yield-curve analytics backed by rigorously tested numerical kernels.
+
+</div>
 
 <div align="center">
 
-[![Current Release](https://img.shields.io/github/release/neuralsorcerer/dervflow.svg)](https://github.com/neuralsorcerer/dervflow/releases)
+[![Current Release](https://img.shields.io/github/release/alphavelocity/dervflow.svg)](https://github.com/alphavelocity/dervflow/releases)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10+-fcbc2c.svg?logo=python&logoColor=white)](https://www.python.org/downloads/)
 [![rustc 1.85+](https://img.shields.io/badge/rustc-1.85+-blue.svg?logo=rust&logoColor=white)](https://rust-lang.github.io/rfcs/2495-min-rust-version.html)
-[![Test Linux](https://github.com/neuralsorcerer/dervflow/actions/workflows/test_ubuntu.yml/badge.svg)](https://github.com/neuralsorcerer/dervflow/actions/workflows/test_ubuntu.yml?query=branch%3Amain)
-[![Test Windows](https://github.com/neuralsorcerer/dervflow/actions/workflows/test_windows.yml/badge.svg)](https://github.com/neuralsorcerer/dervflow/actions/workflows/test_windows.yml?query=branch%3Amain)
-[![Test MacOS](https://github.com/neuralsorcerer/dervflow/actions/workflows/test_macos.yml/badge.svg)](https://github.com/neuralsorcerer/dervflow/actions/workflows/test_macos.yml?query=branch%3Amain)
-[![Lints](https://github.com/neuralsorcerer/dervflow/actions/workflows/lints.yml/badge.svg)](https://github.com/neuralsorcerer/dervflow/actions/workflows/lints.yml?query=branch%3Amain)
+[![Test Linux](https://github.com/alphavelocity/dervflow/actions/workflows/test_ubuntu.yml/badge.svg)](https://github.com/alphavelocity/dervflow/actions/workflows/test_ubuntu.yml?query=branch%3Amain)
+[![Test Windows](https://github.com/alphavelocity/dervflow/actions/workflows/test_windows.yml/badge.svg)](https://github.com/alphavelocity/dervflow/actions/workflows/test_windows.yml?query=branch%3Amain)
+[![Test MacOS](https://github.com/alphavelocity/dervflow/actions/workflows/test_macos.yml/badge.svg)](https://github.com/alphavelocity/dervflow/actions/workflows/test_macos.yml?query=branch%3Amain)
+[![Lints](https://github.com/alphavelocity/dervflow/actions/workflows/lints.yml/badge.svg)](https://github.com/alphavelocity/dervflow/actions/workflows/lints.yml?query=branch%3Amain)
 [![License](https://img.shields.io/badge/License-Apache%202.0-3c60b1.svg?logo=opensourceinitiative&logoColor=white)](./LICENSE)
 
 </div>
@@ -274,7 +278,7 @@ If you use dervflow in your work and wish to refer to it, please use the followi
   author = {Soumyadip Sarkar},
   title = {DervFlow: A Lightweight, High-Performance Mathematics & Quantitative Finance Toolkit},
   year = {2025},
-  url = {https://github.com/neuralsorcerer/dervflow}
+  url = {https://github.com/alphavelocity/dervflow}
 }
 ```
 

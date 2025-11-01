@@ -143,16 +143,17 @@ class PortfolioOptimizer:
         if covariance is not None:
             cov_array = np.asarray(covariance, dtype=np.float64)
             self._optimizer = _PortfolioOptimizer(returns_array, cov_array)
-            self.expected_returns = returns_array
-            self.covariance = cov_array
-            self.n_assets = len(returns_array)
         else:
-            # Assume returns_array is 2D historical returns
+            # Historical returns provided – delegate statistics computation to Rust
             self._optimizer = _PortfolioOptimizer(returns_array)
-            # Calculate expected returns and covariance from historical data
-            self.expected_returns = np.mean(returns_array, axis=0)
-            self.covariance = np.cov(returns_array, rowvar=False)
-            self.n_assets = returns_array.shape[1]
+
+        self.expected_returns = np.asarray(
+            self._optimizer.expected_returns, dtype=np.float64
+        )
+        self.covariance = np.asarray(
+            self._optimizer.covariance_matrix, dtype=np.float64
+        )
+        self.n_assets = int(self._optimizer.num_assets)
 
     def optimize(
         self,

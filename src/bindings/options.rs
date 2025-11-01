@@ -14,6 +14,7 @@ use crate::options::volatility::implied_volatility;
 use numpy::{PyArray1, PyReadonlyArray1};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use rayon::prelude::*;
 use std::collections::HashMap;
 
 /// Convert DervflowError to Python exception
@@ -225,12 +226,12 @@ impl PyBlackScholesModel {
         times: PyReadonlyArray1<f64>,
         option_types: Vec<String>,
     ) -> PyResult<Bound<'py, PyArray1<f64>>> {
-        let spots = spots.as_array();
-        let strikes = strikes.as_array();
-        let rates = rates.as_array();
-        let dividends = dividends.as_array();
-        let volatilities = volatilities.as_array();
-        let times = times.as_array();
+        let spots = spots.as_slice()?;
+        let strikes = strikes.as_slice()?;
+        let rates = rates.as_slice()?;
+        let dividends = dividends.as_slice()?;
+        let volatilities = volatilities.as_slice()?;
+        let times = times.as_slice()?;
 
         // Check that all arrays have the same length
         let n = spots.len();
@@ -251,35 +252,43 @@ impl PyBlackScholesModel {
             option_types.iter().map(|s| parse_option_type(s)).collect();
         let parsed_types = parsed_types?;
 
-        // Convert arrays to owned vectors for use in closure
-        let spots_vec: Vec<f64> = spots.to_vec();
-        let strikes_vec: Vec<f64> = strikes.to_vec();
-        let rates_vec: Vec<f64> = rates.to_vec();
-        let dividends_vec: Vec<f64> = dividends.to_vec();
-        let volatilities_vec: Vec<f64> = volatilities.to_vec();
-        let times_vec: Vec<f64> = times.to_vec();
-
-        // Release GIL for parallel computation
+        // Release GIL for computation
         #[allow(deprecated)]
         let prices = py.allow_threads(move || {
-            use rayon::prelude::*;
+            const PARALLEL_THRESHOLD: usize = 4_096;
 
-            // Use parallel iterator for batch pricing
-            (0..n)
-                .into_par_iter()
-                .map(|i| {
+            if n < PARALLEL_THRESHOLD {
+                let mut results = Vec::with_capacity(n);
+                for i in 0..n {
                     let params = OptionParams::new(
-                        spots_vec[i],
-                        strikes_vec[i],
-                        rates_vec[i],
-                        dividends_vec[i],
-                        volatilities_vec[i],
-                        times_vec[i],
+                        spots[i],
+                        strikes[i],
+                        rates[i],
+                        dividends[i],
+                        volatilities[i],
+                        times[i],
                         parsed_types[i],
                     );
-                    black_scholes_price(&params)
-                })
-                .collect::<Result<Vec<f64>, _>>()
+                    results.push(black_scholes_price(&params)?);
+                }
+                Ok(results)
+            } else {
+                (0..n)
+                    .into_par_iter()
+                    .map(|i| {
+                        let params = OptionParams::new(
+                            spots[i],
+                            strikes[i],
+                            rates[i],
+                            dividends[i],
+                            volatilities[i],
+                            times[i],
+                            parsed_types[i],
+                        );
+                        black_scholes_price(&params)
+                    })
+                    .collect::<Result<Vec<f64>, _>>()
+            }
         });
 
         let prices = prices.map_err(to_py_err)?;

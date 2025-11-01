@@ -9,6 +9,7 @@
 use nalgebra::{DMatrix, DVector};
 use ndarray::Array2;
 use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 
@@ -130,6 +131,28 @@ impl PyPortfolioOptimizer {
             expected_returns,
             covariance: cov_matrix,
         })
+    }
+
+    /// Return the expected returns vector used by the optimizer.
+    #[getter]
+    fn expected_returns(&self, py: Python<'_>) -> Py<PyArray1<f64>> {
+        PyArray1::from_vec(py, self.expected_returns.clone()).unbind()
+    }
+
+    /// Return the covariance matrix backing the optimizer.
+    #[getter]
+    fn covariance_matrix(&self, py: Python<'_>) -> PyResult<Py<PyArray2<f64>>> {
+        let (rows, cols) = (self.covariance.nrows(), self.covariance.ncols());
+        let data: Vec<f64> = self.covariance.iter().copied().collect();
+        let array = Array2::from_shape_vec((rows, cols), data)
+            .map_err(|err| PyValueError::new_err(err.to_string()))?;
+        Ok(PyArray2::from_owned_array(py, array).unbind())
+    }
+
+    /// Number of assets tracked by the optimizer.
+    #[getter]
+    fn num_assets(&self) -> usize {
+        self.expected_returns.len()
     }
 
     /// Optimize portfolio for a given target

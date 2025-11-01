@@ -76,9 +76,9 @@ examples = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/neuralsorcerer/dervflow"
-Repository = "https://github.com/neuralsorcerer/dervflow"
-Issues = "https://github.com/neuralsorcerer/dervflow/issues"
+Homepage = "https://github.com/alphavelocity/dervflow"
+Repository = "https://github.com/alphavelocity/dervflow"
+Issues = "https://github.com/alphavelocity/dervflow/issues"
 
 [tool.maturin]
 python-source = "python"
