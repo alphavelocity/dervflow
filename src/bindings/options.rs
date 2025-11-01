@@ -253,8 +253,7 @@ impl PyBlackScholesModel {
         let parsed_types = parsed_types?;
 
         // Release GIL for computation
-        #[allow(deprecated)]
-        let prices = py.allow_threads(move || {
+        let prices = py.detach(move || {
             const PARALLEL_THRESHOLD: usize = 4_096;
 
             if n < PARALLEL_THRESHOLD {
@@ -454,8 +453,7 @@ impl PyBlackScholesModel {
         let times_vec: Vec<f64> = times.to_vec();
 
         // Release GIL for parallel computation
-        #[allow(deprecated)]
-        let ivs = py.allow_threads(move || {
+        let ivs = py.detach(move || {
             use rayon::prelude::*;
 
             // Use parallel iterator for batch IV calculation
@@ -744,8 +742,7 @@ impl PyBinomialTreeModel {
         let times_vec: Vec<f64> = times.to_vec();
 
         // Release GIL for parallel computation
-        #[allow(deprecated)]
-        let prices = py.allow_threads(move || {
+        let prices = py.detach(move || {
             use rayon::prelude::*;
 
             // Use parallel iterator for batch pricing
@@ -906,8 +903,7 @@ impl PyMonteCarloOptionPricer {
         let params = OptionParams::new(spot, strike, rate, dividend, volatility, time, opt_type);
 
         // Release GIL for computation
-        #[allow(deprecated)]
-        let result = py.allow_threads(|| {
+        let result = py.detach(|| {
             if parallel {
                 price_european_monte_carlo_parallel(&params, num_paths, use_antithetic, seed)
             } else {
@@ -1002,8 +998,7 @@ impl PyMonteCarloOptionPricer {
         let params = OptionParams::new(spot, strike, rate, dividend, volatility, time, opt_type);
 
         // Release GIL for computation
-        #[allow(deprecated)]
-        let result = py.allow_threads(|| {
+        let result = py.detach(|| {
             if parallel {
                 price_american_monte_carlo_parallel(&params, num_paths, num_steps, seed)
             } else {
@@ -1847,9 +1842,8 @@ impl PySABRModel {
         use crate::options::volatility::calibrate_sabr;
 
         // Release GIL for optimization
-        #[allow(deprecated)]
         let params =
-            py.allow_threads(|| calibrate_sabr(forward, maturity, &strikes, &market_vols, beta));
+            py.detach(|| calibrate_sabr(forward, maturity, &strikes, &market_vols, beta));
 
         let params = params.map_err(to_py_err)?;
         Ok(Self { inner: params })
