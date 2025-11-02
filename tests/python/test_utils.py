@@ -5,6 +5,8 @@
 # LICENSE file in the root directory of this source tree.
 
 import math
+from decimal import Decimal
+from statistics import NormalDist
 
 import numpy as np
 import pytest
@@ -401,15 +403,96 @@ def test_value_at_risk_accepts_percentage_confidence():
     assert math.isclose(var_decimal, var_string)
 
 
-@pytest.mark.parametrize(
-    "alias",
-    ["parametric", "gaussian", "normal", "variance-covariance", "variance_covariance"],
-)
-def test_value_at_risk_method_aliases(alias):
+def test_value_at_risk_confidence_level_variants():
     returns = np.array([0.01, -0.02, 0.015, -0.005])
-    baseline = utils.value_at_risk(returns, method="parametric")
+    baseline = utils.value_at_risk(returns, confidence_level=0.975)
+    for variant in ("0.975", "97.5", "97.5%", Decimal("0.975"), Decimal("97.5")):
+        assert math.isclose(
+            utils.value_at_risk(returns, confidence_level=variant), baseline
+        )
+
+
+@pytest.mark.parametrize(
+    ("alias", "baseline_method"),
+    [
+        ("parametric", "parametric"),
+        ("gaussian", "parametric"),
+        ("normal", "parametric"),
+        ("variance-covariance", "parametric"),
+        ("variance_covariance", "parametric"),
+        ("variance covariance", "parametric"),
+        ("cornish fisher", "cornish_fisher"),
+        ("CF", "cornish_fisher"),
+    ],
+)
+def test_value_at_risk_method_aliases(alias, baseline_method):
+    returns = np.array([0.01, -0.02, 0.015, -0.005])
+    baseline = utils.value_at_risk(returns, method=baseline_method)
     alias_result = utils.value_at_risk(returns, method=alias)
     assert math.isclose(baseline, alias_result)
+
+
+@pytest.mark.parametrize("alias", ["monte_carlo", "Monte Carlo", "mc", "simulation"])
+def test_value_at_risk_monte_carlo_aliases(alias):
+    mean = 0.001
+    std_dev = 0.02
+    confidence = 0.975
+    simulations = 20_000
+    baseline = utils.value_at_risk(
+        confidence_level=confidence,
+        method="monte_carlo",
+        mean=mean,
+        std_dev=std_dev,
+        num_simulations=simulations,
+        seed=123,
+    )
+    alias_result = utils.value_at_risk(
+        confidence_level=confidence,
+        method=alias,
+        mean=mean,
+        std_dev=std_dev,
+        num_simulations=simulations,
+        seed=123,
+    )
+    assert math.isclose(baseline, alias_result)
+
+
+def test_value_at_risk_ewma_matches_manual_formula():
+    returns = np.array([0.01, -0.015, 0.02, -0.005, 0.012])
+    confidence = 0.975
+    decay = 0.93
+
+    ewma_var = utils.value_at_risk(
+        returns,
+        confidence_level=confidence,
+        method="ewma",
+        decay=decay,
+    )
+
+    variance = returns[0] ** 2
+    for ret in returns[1:]:
+        variance = decay * variance + (1 - decay) * (ret ** 2)
+    sigma = math.sqrt(variance)
+    alpha = 1 - confidence
+    z = NormalDist().inv_cdf(alpha)
+    expected = -z * sigma
+
+    assert math.isclose(ewma_var, expected)
+
+
+def test_value_at_risk_ewma_aliases():
+    returns = np.array([0.01, -0.015, 0.02, -0.005, 0.012])
+    baseline = utils.value_at_risk(returns, method="ewma", decay=0.9)
+    alias = utils.value_at_risk(returns, method="risk metrics", decay=0.9)
+    assert math.isclose(alias, baseline)
+
+
+def test_value_at_risk_ewma_invalid_decay():
+    returns = np.array([0.01, -0.02, 0.015])
+    with pytest.raises(ValueError):
+        utils.value_at_risk(returns, method="ewma", decay=1.0)
+    with pytest.raises(ValueError):
+        utils.value_at_risk(returns, method="ewma", decay=-0.1)
 
 
 def test_conditional_value_at_risk_accepts_string_confidence():
@@ -419,9 +502,81 @@ def test_conditional_value_at_risk_accepts_string_confidence():
     assert math.isclose(cvar_decimal, cvar_string)
 
 
+@pytest.mark.parametrize(
+    ("alias", "baseline_method"),
+    [
+        ("cornish fisher", "cornish_fisher"),
+        ("CF", "cornish_fisher"),
+        ("variance covariance", "parametric"),
+    ],
+)
+def test_conditional_value_at_risk_aliases(alias, baseline_method):
+    returns = np.array([0.01, -0.02, 0.015, -0.005])
+    baseline = utils.conditional_value_at_risk(returns, method=baseline_method)
+    alias_result = utils.conditional_value_at_risk(returns, method=alias)
+    assert math.isclose(baseline, alias_result)
+
+
+def test_conditional_value_at_risk_ewma_matches_closed_form():
+    returns = np.array([0.01, -0.015, 0.02, -0.005, 0.012])
+    confidence = 0.975
+    decay = 0.93
+
+    ewma_cvar = utils.conditional_value_at_risk(
+        returns,
+        confidence_level=confidence,
+        method="ewma",
+        decay=decay,
+    )
+
+    variance = returns[0] ** 2
+    for value in returns[1:]:
+        variance = decay * variance + (1 - decay) * (value ** 2)
+    sigma = math.sqrt(variance)
+    alpha = 1 - confidence
+    z = NormalDist().inv_cdf(alpha)
+    pdf = math.exp(-0.5 * (z**2)) / math.sqrt(2 * math.pi)
+    expected_cvar = sigma * (pdf / alpha)
+
+    assert math.isclose(ewma_cvar, expected_cvar, rel_tol=1e-8, abs_tol=1e-12)
+
+
+def test_conditional_value_at_risk_ewma_aliases():
+    returns = np.array([0.01, -0.015, 0.02, -0.005, 0.012])
+    baseline = utils.conditional_value_at_risk(returns, method="ewma", decay=0.9)
+    alias = utils.conditional_value_at_risk(returns, method="risk metrics", decay=0.9)
+    assert math.isclose(alias, baseline)
+
+
+def test_conditional_value_at_risk_ewma_invalid_inputs():
+    returns = np.array([0.01, -0.02, 0.015])
+    with pytest.raises(ValueError):
+        utils.conditional_value_at_risk(returns, method="ewma", decay=1.0)
+    with pytest.raises(ValueError):
+        utils.conditional_value_at_risk(returns, method="ewma", decay=-0.05)
+    with pytest.raises(ValueError):
+        utils.conditional_value_at_risk(None, method="ewma")
+
+
 def test_value_at_risk_historical_requires_returns():
     with pytest.raises(ValueError):
         utils.value_at_risk(confidence_level=0.95, method="historical")
+
+
+@pytest.mark.parametrize(
+    "bad_confidence",
+    [0.0, 1.0, -0.1, 150, "", "abc", None],
+)
+def test_value_at_risk_invalid_confidence(bad_confidence):
+    returns = np.array([0.01, -0.02, 0.015, -0.005])
+    with pytest.raises((ValueError, TypeError)):
+        utils.value_at_risk(returns, confidence_level=bad_confidence)
+
+
+def test_value_at_risk_invalid_method():
+    returns = np.array([0.01, -0.02, 0.015, -0.005])
+    with pytest.raises(ValueError):
+        utils.value_at_risk(returns, method="unknown")
 
 
 def test_value_at_risk_monte_carlo_matches_risk_metrics():

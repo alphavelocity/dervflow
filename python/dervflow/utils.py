@@ -11,6 +11,9 @@ from __future__ import annotations
 from dervflow._dervflow import utils as _utils
 
 
+_DEFAULT_CONFIDENCE = object()
+
+
 def validate_option_params(spot, strike, rate, dividend, volatility, time):
     """Validate option pricing parameters."""
 
@@ -143,13 +146,14 @@ def downside_capture_ratio(returns, benchmark_returns, periods_per_year: int = 2
 
 def value_at_risk(
     returns=None,
-    confidence_level=0.95,
+    confidence_level=_DEFAULT_CONFIDENCE,
     method: str = "historical",
     *,
     mean: float | None = None,
     std_dev: float | None = None,
     num_simulations: int = 10_000,
     seed: int | None = None,
+    decay: float | None = None,
 ):
     """Estimate Value at Risk (VaR) for a return series.
 
@@ -163,56 +167,68 @@ def value_at_risk(
         Tail confidence level expressed either as a probability in ``(0, 1)`` or
         a percentage (e.g. ``95`` or ``"95%"``).
     method:
-        VaR methodology: ``historical``, ``parametric``, ``cornish_fisher`` or
-        ``monte_carlo``.
+        VaR methodology: ``historical``, ``parametric``, ``cornish_fisher``,
+        ``monte_carlo`` or ``ewma``.
     mean, std_dev:
         Distribution parameters required for the Monte Carlo method.
     num_simulations:
         Number of Monte Carlo paths to simulate when ``method='monte_carlo'``.
     seed:
         Optional seed for reproducible Monte Carlo draws.
+    decay:
+        EWMA decay factor when ``method='ewma'``. Defaults to ``0.94`` if not
+        provided.
     """
 
-    method_key = method.replace(" ", "_").lower()
-    if method_key in {"monte_carlo", "montecarlo", "mc"}:
-        return _utils.value_at_risk(
-            returns,
-            confidence_level,
-            method,
-            mean,
-            std_dev,
-            num_simulations,
-            seed,
-        )
+    if confidence_level is _DEFAULT_CONFIDENCE:
+        resolved_confidence = 0.95
+    elif confidence_level is None:
+        raise ValueError("confidence_level must lie strictly between 0 and 1")
+    else:
+        resolved_confidence = confidence_level
 
-    return _utils.value_at_risk(returns, confidence_level, method)
+    return _utils.value_at_risk(
+        returns,
+        resolved_confidence,
+        method,
+        mean,
+        std_dev,
+        num_simulations,
+        seed,
+        decay,
+    )
 
 
 def conditional_value_at_risk(
     returns=None,
-    confidence_level=0.95,
+    confidence_level=_DEFAULT_CONFIDENCE,
     method: str = "historical",
     *,
     mean: float | None = None,
     std_dev: float | None = None,
     num_simulations: int = 10_000,
     seed: int | None = None,
+    decay: float | None = None,
 ):
     """Estimate Conditional Value at Risk (CVaR) for a return series."""
 
-    method_key = method.replace(" ", "_").lower()
-    if method_key in {"monte_carlo", "montecarlo", "mc"}:
-        return _utils.conditional_value_at_risk(
-            returns,
-            confidence_level,
-            method,
-            mean,
-            std_dev,
-            num_simulations,
-            seed,
-        )
+    if confidence_level is _DEFAULT_CONFIDENCE:
+        resolved_confidence = 0.95
+    elif confidence_level is None:
+        raise ValueError("confidence_level must lie strictly between 0 and 1")
+    else:
+        resolved_confidence = confidence_level
 
-    return _utils.conditional_value_at_risk(returns, confidence_level, method)
+    return _utils.conditional_value_at_risk(
+        returns,
+        resolved_confidence,
+        method,
+        mean,
+        std_dev,
+        num_simulations,
+        seed,
+        decay,
+    )
 
 
 def drawdown_series(prices):

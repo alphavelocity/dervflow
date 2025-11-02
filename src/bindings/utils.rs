@@ -17,7 +17,9 @@ use pyo3::types::PyModule;
 use statrs::distribution::{Continuous, ContinuousCDF, Normal};
 
 use crate::risk::metrics;
-use crate::risk::var::{monte_carlo_cvar, monte_carlo_var, parametric_var};
+use crate::risk::var::{
+    monte_carlo_cvar, monte_carlo_var, parametric_var, riskmetrics_cvar, riskmetrics_var,
+};
 
 fn flatten_any(obj: &Bound<'_, PyAny>, name: &str) -> PyResult<Vec<f64>> {
     if let Ok(value) = obj.extract::<f64>() {
@@ -143,24 +145,40 @@ fn std(data: &[f64], ddof: usize) -> f64 {
 }
 
 fn canonical_method(method: &str) -> PyResult<&'static str> {
-    let key = method.trim().to_lowercase().replace(' ', "_");
-    match key.as_str() {
-        "historical" | "empirical" => Ok("historical"),
-        "parametric" | "gaussian" | "normal" | "variance_covariance" | "variance-covariance" => {
-            Ok("parametric")
-        }
-        "cornish_fisher" | "cornish-fisher" => Ok("cornish_fisher"),
-        "monte_carlo" | "montecarlo" | "mc" => Ok("monte_carlo"),
-        _ => Err(PyErr::new::<PyValueError, _>(
-            "method must be 'historical', 'parametric', 'cornish_fisher', or 'monte_carlo'",
-        )),
-    }
+    let mut key = method.trim().to_lowercase();
+    key = key.replace('-', "_");
+    key = key.replace(' ', "_");
+
+    let canonical = match key.as_str() {
+        "historical" | "empirical" | "sample" => Ok("historical"),
+        "parametric"
+        | "gaussian"
+        | "normal"
+        | "variance_covariance"
+        | "variancecovariance"
+        | "variancecov" => Ok("parametric"),
+        "cornish_fisher" | "cornishfisher" | "cf" => Ok("cornish_fisher"),
+        "monte_carlo" | "montecarlo" | "mc" | "simulation" => Ok("monte_carlo"),
+        _ => Err(()),
+    };
+
+    canonical.map_err(|_| {
+        PyErr::new::<PyValueError, _>(format!(
+            "Unsupported risk metric method: {method}. Expected one of historical, parametric, cornish_fisher, monte_carlo."
+        ))
+    })
 }
 
 fn parse_confidence_level(obj: Option<&Bound<'_, PyAny>>) -> PyResult<f64> {
     let Some(value_obj) = obj else {
         return Ok(0.95);
     };
+
+    if value_obj.is_none() {
+        return Err(PyErr::new::<PyValueError, _>(
+            "confidence_level must be between 0 and 1",
+        ));
+    }
 
     if let Ok(value) = value_obj.extract::<f64>() {
         return parse_confidence_from_float(value);
@@ -189,7 +207,7 @@ fn parse_confidence_from_float(value: f64) -> PyResult<f64> {
         confidence /= 100.0;
     }
 
-    if !(0.0..1.0).contains(&confidence) {
+    if !confidence.is_finite() || !(0.0 < confidence && confidence < 1.0) {
         return Err(PyErr::new::<PyValueError, _>(
             "confidence_level must be between 0 and 1",
         ));
@@ -641,7 +659,7 @@ fn downside_capture_ratio(
 }
 
 #[pyfunction]
-#[pyo3(signature = (returns=None, confidence_level=None, method="historical", mean=None, std_dev=None, num_simulations=10000, seed=None))]
+#[pyo3(signature = (returns=None, confidence_level=None, method="historical", mean=None, std_dev=None, num_simulations=10000, seed=None, decay=None))]
 fn value_at_risk(
     returns: Option<&Bound<'_, PyAny>>,
     confidence_level: Option<&Bound<'_, PyAny>>,
@@ -650,9 +668,27 @@ fn value_at_risk(
     std_dev: Option<f64>,
     num_simulations: usize,
     seed: Option<u64>,
+    decay: Option<f64>,
 ) -> PyResult<f64> {
     let confidence = parse_confidence_level(confidence_level)?;
-    let method_key = canonical_method(method)?;
+    let mut method_key = method.trim().to_lowercase();
+    method_key = method_key.replace('-', "_");
+    method_key = method_key.replace(' ', "_");
+
+    if matches!(
+        method_key.as_str(),
+        "ewma" | "riskmetrics" | "risk_metrics" | "riskmetric" | "risk_metric"
+    ) {
+        let returns = returns.ok_or_else(|| {
+            PyErr::new::<PyValueError, _>("returns are required for the ewma method")
+        })?;
+        let decay_value = decay.unwrap_or(0.94);
+        let return_array = to_1d_array(returns, "returns")?;
+        let var = riskmetrics_var(&return_array, confidence, decay_value).map_err(PyErr::from)?;
+        return Ok(var.max(0.0));
+    }
+
+    let method_key = canonical_method(&method_key)?;
 
     match method_key {
         "historical" => {
@@ -734,7 +770,7 @@ fn value_at_risk(
 }
 
 #[pyfunction]
-#[pyo3(signature = (returns=None, confidence_level=None, method="historical", mean=None, std_dev=None, num_simulations=10000, seed=None))]
+#[pyo3(signature = (returns=None, confidence_level=None, method="historical", mean=None, std_dev=None, num_simulations=10000, seed=None, decay=None))]
 fn conditional_value_at_risk(
     returns: Option<&Bound<'_, PyAny>>,
     confidence_level: Option<&Bound<'_, PyAny>>,
@@ -743,9 +779,28 @@ fn conditional_value_at_risk(
     std_dev: Option<f64>,
     num_simulations: usize,
     seed: Option<u64>,
+    decay: Option<f64>,
 ) -> PyResult<f64> {
     let confidence = parse_confidence_level(confidence_level)?;
-    let method_key = canonical_method(method)?;
+    let mut method_key = method.trim().to_lowercase();
+    method_key = method_key.replace('-', "_");
+    method_key = method_key.replace(' ', "_");
+
+    if matches!(
+        method_key.as_str(),
+        "ewma" | "riskmetrics" | "risk_metrics" | "riskmetric" | "risk_metric"
+    ) {
+        let returns = returns.ok_or_else(|| {
+            PyErr::new::<PyValueError, _>("returns are required for the ewma method")
+        })?;
+        let decay_value = decay.unwrap_or(0.94);
+        let return_array = to_1d_array(returns, "returns")?;
+        let cvar = riskmetrics_cvar(&return_array, confidence, decay_value).map_err(PyErr::from)?;
+        let var = riskmetrics_var(&return_array, confidence, decay_value).map_err(PyErr::from)?;
+        return Ok(cvar.max(var).max(0.0));
+    }
+
+    let method_key = canonical_method(&method_key)?;
 
     match method_key {
         "historical" => {

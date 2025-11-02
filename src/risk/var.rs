@@ -15,6 +15,7 @@
 
 use crate::common::error::{DervflowError, Result};
 use crate::numerical::random::RandomGenerator;
+use std::f64::consts::PI;
 
 /// VaR calculation method
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -27,6 +28,8 @@ pub enum VaRMethod {
     CornishFisher,
     /// Monte Carlo simulation
     MonteCarlo,
+    /// Exponentially weighted moving average
+    Ewma,
 }
 
 /// Result of a VaR calculation
@@ -357,6 +360,93 @@ pub fn monte_carlo_cvar(
     historical_cvar(&simulated_returns, confidence_level)
 }
 
+/// Calculate Value at Risk using the RiskMetrics 1996 EWMA volatility model
+///
+/// The RiskMetrics approach estimates the conditional volatility using an
+/// exponentially weighted moving average (EWMA) with decay factor ``lambda``.
+/// The VaR forecast assumes zero mean returns and a normal distribution.
+///
+/// # Arguments
+/// * `returns` - Historical return observations (negative values are losses)
+/// * `confidence_level` - Tail confidence level (e.g., 0.95 for 95%)
+/// * `decay` - EWMA decay factor in the half-open interval [0, 1)
+///
+/// # Returns
+/// VaR estimate expressed as a positive loss amount
+pub fn riskmetrics_var(returns: &[f64], confidence_level: f64, decay: f64) -> Result<f64> {
+    validate_confidence_level(confidence_level)?;
+    let sigma = compute_ewma_sigma(returns, decay)?;
+    let alpha = 1.0 - confidence_level;
+    let z = inverse_normal_cdf(alpha)?;
+    let var = -z * sigma;
+
+    Ok(var.max(0.0))
+}
+
+/// Calculate Conditional VaR using the RiskMetrics 1996 EWMA volatility model
+///
+/// The RiskMetrics CVaR assumes normally distributed, zero-mean returns with
+/// volatility estimated via the EWMA filter. The closed-form expression for the
+/// expected shortfall of a normal distribution is utilised to avoid numerical
+/// integration.
+pub fn riskmetrics_cvar(returns: &[f64], confidence_level: f64, decay: f64) -> Result<f64> {
+    validate_confidence_level(confidence_level)?;
+    let sigma = compute_ewma_sigma(returns, decay)?;
+    let alpha = 1.0 - confidence_level;
+    let z = inverse_normal_cdf(alpha)?;
+    let pdf = (-0.5 * z * z).exp() / (2.0 * PI).sqrt();
+    let var = -z * sigma;
+    let cvar = sigma * (pdf / alpha);
+
+    Ok(cvar.max(var).max(0.0))
+}
+
+fn validate_confidence_level(confidence_level: f64) -> Result<()> {
+    if confidence_level <= 0.0 || confidence_level >= 1.0 {
+        return Err(DervflowError::InvalidInput(format!(
+            "Confidence level must be between 0 and 1, got {}",
+            confidence_level
+        )));
+    }
+    Ok(())
+}
+
+fn compute_ewma_sigma(returns: &[f64], decay: f64) -> Result<f64> {
+    if returns.is_empty() {
+        return Err(DervflowError::InvalidInput(
+            "Returns array cannot be empty".to_string(),
+        ));
+    }
+
+    if !(0.0..1.0).contains(&decay) {
+        return Err(DervflowError::InvalidInput(format!(
+            "Decay factor must be in [0, 1), got {}",
+            decay
+        )));
+    }
+
+    if !returns.iter().all(|value| value.is_finite()) {
+        return Err(DervflowError::InvalidInput(
+            "Returns must contain only finite values".to_string(),
+        ));
+    }
+
+    let mut variance = returns[0] * returns[0];
+    let weight = 1.0 - decay;
+
+    for &ret in returns.iter().skip(1) {
+        variance = decay * variance + weight * ret * ret;
+    }
+
+    if !variance.is_finite() || variance < 0.0 {
+        return Err(DervflowError::NumericalError(
+            "Failed to compute EWMA variance".to_string(),
+        ));
+    }
+
+    Ok(variance.sqrt())
+}
+
 /// Inverse normal cumulative distribution function (quantile function)
 ///
 /// Approximation using Beasley-Springer-Moro algorithm
@@ -486,6 +576,52 @@ mod tests {
         let cvar = monte_carlo_cvar(0.0, 0.02, 10000, 0.95, Some(42)).unwrap();
         let var = monte_carlo_var(0.0, 0.02, 10000, 0.95, Some(42)).unwrap();
         assert!(cvar >= var);
+    }
+
+    #[test]
+    fn test_riskmetrics_var() {
+        let returns = [0.01, -0.015, 0.02, -0.005, 0.012];
+        let var = riskmetrics_var(&returns, 0.95, 0.94).unwrap();
+        assert!((var - 0.018_059_277_868).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_riskmetrics_cvar_matches_closed_form() {
+        let returns = [0.01, -0.015, 0.02, -0.005, 0.012];
+        let confidence = 0.975;
+        let decay = 0.93;
+
+        let var = riskmetrics_var(&returns, confidence, decay).unwrap();
+        let cvar = riskmetrics_cvar(&returns, confidence, decay).unwrap();
+
+        assert!(cvar >= var);
+
+        let mut variance = returns[0] * returns[0];
+        for &value in returns.iter().skip(1) {
+            variance = decay * variance + (1.0 - decay) * value * value;
+        }
+        let sigma = variance.sqrt();
+        let alpha = 1.0 - confidence;
+        let z = inverse_normal_cdf(alpha).unwrap();
+        let pdf = (-0.5 * z * z).exp() / (2.0 * std::f64::consts::PI).sqrt();
+        let expected_cvar = sigma * (pdf / alpha);
+
+        assert!((cvar - expected_cvar).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_riskmetrics_var_invalid_decay() {
+        let returns = [0.01, -0.02, 0.015];
+        assert!(riskmetrics_var(&returns, 0.95, 1.0).is_err());
+        assert!(riskmetrics_var(&returns, 0.95, -0.1).is_err());
+    }
+
+    #[test]
+    fn test_riskmetrics_cvar_invalid_inputs() {
+        let returns = [0.01, -0.02, 0.015];
+        assert!(riskmetrics_cvar(&returns, 0.95, 1.0).is_err());
+        assert!(riskmetrics_cvar(&returns, 0.0, 0.94).is_err());
+        assert!(riskmetrics_cvar(&[], 0.95, 0.94).is_err());
     }
 
     #[test]

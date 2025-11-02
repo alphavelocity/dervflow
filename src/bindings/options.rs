@@ -1842,8 +1842,7 @@ impl PySABRModel {
         use crate::options::volatility::calibrate_sabr;
 
         // Release GIL for optimization
-        let params =
-            py.detach(|| calibrate_sabr(forward, maturity, &strikes, &market_vols, beta));
+        let params = py.detach(|| calibrate_sabr(forward, maturity, &strikes, &market_vols, beta));
 
         let params = params.map_err(to_py_err)?;
         Ok(Self { inner: params })

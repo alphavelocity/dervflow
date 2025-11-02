@@ -21,7 +21,7 @@ use crate::risk::portfolio_risk::{
 };
 use crate::risk::var::{
     cornish_fisher_var, historical_cvar, historical_var, monte_carlo_cvar, monte_carlo_var,
-    parametric_var,
+    parametric_var, riskmetrics_cvar, riskmetrics_var,
 };
 use nalgebra::DMatrix;
 
@@ -458,7 +458,7 @@ impl PyRiskMetrics {
     /// confidence_level : float
     ///     Confidence level (e.g., 0.95 for 95%)
     /// method : str
-    ///     VaR calculation method: 'historical', 'parametric', 'cornish_fisher', or 'monte_carlo'
+    ///     VaR calculation method: 'historical', 'parametric', 'cornish_fisher', 'monte_carlo', or 'ewma'
     /// mean : float, optional
     ///     Expected return (required for monte_carlo method)
     /// std_dev : float, optional
@@ -467,6 +467,8 @@ impl PyRiskMetrics {
     ///     Number of simulations (for monte_carlo method, default: 10000)
     /// seed : int, optional
     ///     Random seed for reproducibility (for monte_carlo method)
+    /// decay : float, optional
+    ///     EWMA decay factor when ``method='ewma'`` (default: 0.94)
     ///
     /// Returns
     /// -------
@@ -481,7 +483,7 @@ impl PyRiskMetrics {
     /// >>> result = rm.var(returns, 0.95, 'historical')
     /// >>> print(result['var'])
     #[allow(clippy::too_many_arguments)]
-    #[pyo3(signature = (returns=None, confidence_level=0.95, method="historical", mean=None, std_dev=None, num_simulations=10000, seed=None))]
+    #[pyo3(signature = (returns=None, confidence_level=0.95, method="historical", mean=None, std_dev=None, num_simulations=10000, seed=None, decay=None))]
     fn var(
         &self,
         py: Python<'_>,
@@ -492,8 +494,13 @@ impl PyRiskMetrics {
         std_dev: Option<f64>,
         num_simulations: usize,
         seed: Option<u64>,
+        decay: Option<f64>,
     ) -> PyResult<Py<PyAny>> {
-        let var_value = match method.to_lowercase().as_str() {
+        let mut method_key = method.trim().to_lowercase();
+        method_key = method_key.replace('-', "_");
+        method_key = method_key.replace(' ', "_");
+
+        let var_value = match method_key.as_str() {
             "historical" => {
                 let returns = returns.ok_or_else(|| {
                     PyErr::new::<pyo3::exceptions::PyValueError, _>(
@@ -535,9 +542,21 @@ impl PyRiskMetrics {
                 monte_carlo_var(mean, std_dev, num_simulations, confidence_level, seed)
                     .map_err(PyErr::from)?
             }
+            "ewma" | "riskmetrics" | "risk_metrics" | "riskmetric" | "risk_metric"
+            | "risk metrics" => {
+                let returns = returns.ok_or_else(|| {
+                    PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                        "returns array is required for ewma method",
+                    )
+                })?;
+                let returns_slice = returns.as_slice()?;
+                let decay_value = decay.unwrap_or(0.94);
+                riskmetrics_var(returns_slice, confidence_level, decay_value)
+                    .map_err(PyErr::from)?
+            }
             _ => {
                 return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                    "Invalid method: '{}'. Must be 'historical', 'parametric', 'cornish_fisher', or 'monte_carlo'",
+                    "Invalid method: '{}'. Must be 'historical', 'parametric', 'cornish_fisher', 'monte_carlo', or 'ewma'",
                     method
                 )));
             }
@@ -570,6 +589,8 @@ impl PyRiskMetrics {
     ///     Number of simulations (for monte_carlo method, default: 10000)
     /// seed : int, optional
     ///     Random seed for reproducibility (for monte_carlo method)
+    /// decay : float, optional
+    ///     EWMA decay factor when ``method='ewma'`` (default: 0.94)
     ///
     /// Returns
     /// -------
@@ -584,7 +605,7 @@ impl PyRiskMetrics {
     /// >>> result = rm.cvar(returns, 0.95)
     /// >>> print(result['cvar'])
     #[allow(clippy::too_many_arguments)]
-    #[pyo3(signature = (returns=None, confidence_level=0.95, method="historical", mean=None, std_dev=None, num_simulations=10000, seed=None))]
+    #[pyo3(signature = (returns=None, confidence_level=0.95, method="historical", mean=None, std_dev=None, num_simulations=10000, seed=None, decay=None))]
     fn cvar(
         &self,
         py: Python<'_>,
@@ -595,8 +616,13 @@ impl PyRiskMetrics {
         std_dev: Option<f64>,
         num_simulations: usize,
         seed: Option<u64>,
+        decay: Option<f64>,
     ) -> PyResult<Py<PyAny>> {
-        let cvar_value = match method.to_lowercase().as_str() {
+        let mut method_key = method.trim().to_lowercase();
+        method_key = method_key.replace('-', "_");
+        method_key = method_key.replace(' ', "_");
+
+        let cvar_value = match method_key.as_str() {
             "historical" => {
                 let returns = returns.ok_or_else(|| {
                     PyErr::new::<pyo3::exceptions::PyValueError, _>(
@@ -620,9 +646,20 @@ impl PyRiskMetrics {
                 monte_carlo_cvar(mean, std_dev, num_simulations, confidence_level, seed)
                     .map_err(PyErr::from)?
             }
+            "ewma" | "riskmetrics" | "risk_metrics" | "riskmetric" | "risk_metric" => {
+                let returns = returns.ok_or_else(|| {
+                    PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                        "returns array is required for ewma method",
+                    )
+                })?;
+                let returns_slice = returns.as_slice()?;
+                let decay_value = decay.unwrap_or(0.94);
+                riskmetrics_cvar(returns_slice, confidence_level, decay_value)
+                    .map_err(PyErr::from)?
+            }
             _ => {
                 return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                    "Invalid method: '{}'. Must be 'historical' or 'monte_carlo'",
+                    "Invalid method: '{}'. Must be 'historical', 'monte_carlo', or 'ewma'",
                     method
                 )));
             }

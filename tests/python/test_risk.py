@@ -8,6 +8,9 @@
 Tests for risk metrics including VaR calculations
 """
 
+import math
+from statistics import NormalDist
+
 import numpy as np
 import pytest
 
@@ -77,6 +80,47 @@ class TestVaRCalculations:
         assert result["method"] == "monte_carlo"
         # For normal distribution with mean 0 and std 0.02, 95% VaR should be around 1.645 * 0.02
         assert abs(result["var"] - 0.0329) < 0.005
+
+    def test_ewma_var(self):
+        """Test EWMA (RiskMetrics) VaR calculation"""
+        rm = RiskMetrics()
+
+        returns = np.array([0.01, -0.015, 0.02, -0.005, 0.012])
+        confidence = 0.975
+        decay = 0.93
+
+        result = rm.var(returns, confidence_level=confidence, method="ewma", decay=decay)
+        assert result["method"].lower() == "ewma"
+
+        variance = returns[0] ** 2
+        for value in returns[1:]:
+            variance = decay * variance + (1 - decay) * (value ** 2)
+        sigma = math.sqrt(variance)
+        alpha = 1 - confidence
+        z = NormalDist().inv_cdf(alpha)
+        expected = -z * sigma
+
+        assert math.isclose(result["var"], expected)
+
+    def test_ewma_var_aliases(self):
+        """EWMA method should accept RiskMetrics aliases"""
+        rm = RiskMetrics()
+        returns = np.array([0.01, -0.015, 0.02, -0.005, 0.012])
+
+        baseline = rm.var(returns, method="ewma", decay=0.94)
+        alias = rm.var(returns, method="risk metrics", decay=0.94)
+
+        assert math.isclose(baseline["var"], alias["var"])
+
+    def test_ewma_var_invalid_decay(self):
+        """EWMA should validate decay factor bounds"""
+        rm = RiskMetrics()
+        returns = np.array([0.01, -0.02, 0.015])
+
+        with pytest.raises(Exception):
+            rm.var(returns, method="ewma", decay=1.0)
+        with pytest.raises(Exception):
+            rm.var(returns, method="ewma", decay=-0.05)
 
     def test_var_comparison_methods(self):
         """Compare VaR across different methods"""
@@ -174,6 +218,41 @@ class TestCVaRCalculations:
 
         assert result["cvar"] > 0.0
         assert result["method"] == "monte_carlo"
+
+    def test_ewma_cvar(self):
+        """Test EWMA CVaR aligns with closed-form expected shortfall"""
+        rm = RiskMetrics()
+        returns = np.array([0.01, -0.015, 0.02, -0.005, 0.012])
+        confidence = 0.975
+        decay = 0.93
+
+        result = rm.cvar(returns, confidence_level=confidence, method="ewma", decay=decay)
+
+        variance = returns[0] ** 2
+        for value in returns[1:]:
+            variance = decay * variance + (1 - decay) * (value**2)
+        sigma = math.sqrt(variance)
+        alpha = 1 - confidence
+        z = NormalDist().inv_cdf(alpha)
+        pdf = math.exp(-0.5 * (z**2)) / math.sqrt(2 * math.pi)
+        expected = sigma * (pdf / alpha)
+
+        assert math.isclose(result["cvar"], expected, rel_tol=1e-8, abs_tol=1e-12)
+
+    def test_ewma_cvar_aliases_and_validation(self):
+        """EWMA CVaR should accept aliases and validate decay"""
+        rm = RiskMetrics()
+        returns = np.array([0.01, -0.015, 0.02, -0.005, 0.012])
+
+        baseline = rm.cvar(returns, method="ewma", decay=0.9)
+        alias = rm.cvar(returns, method="risk metrics", decay=0.9)
+
+        assert math.isclose(baseline["cvar"], alias["cvar"])
+
+        with pytest.raises(Exception):
+            rm.cvar(returns, method="ewma", decay=1.0)
+        with pytest.raises(Exception):
+            rm.cvar(returns, method="ewma", decay=-0.05)
 
 
 class TestRiskMetrics:
