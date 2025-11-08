@@ -33,6 +33,38 @@ def test_stat_enhancements() -> None:
 
     with pytest.raises(ValueError):
         core.coefficient_of_variation([-1.0, 1.0])
+    
+    running_mean = core.cumulative_mean(data)
+    assert np.allclose(running_mean, np.array([1.0, 1.5, 2.0, 2.5]))
+
+    running_variance = core.cumulative_variance(data)
+    expected_variance = np.array([0.0, 0.5, 1.0, 5.0 / 3.0])
+    assert np.allclose(running_variance, expected_variance)
+
+    population_variance = core.cumulative_variance(data, unbiased=False)
+    assert math.isclose(population_variance[-1], 5.0 / 4.0, rel_tol=1e-12)
+
+    running_std = core.cumulative_std(data)
+    expected_std = np.array([0.0, math.sqrt(0.5), 1.0, math.sqrt(5.0 / 3.0)])
+    assert np.allclose(running_std, expected_std)
+
+    population_std = core.cumulative_std(data, unbiased=False)
+    assert math.isclose(population_std[-1], math.sqrt(5.0 / 4.0), rel_tol=1e-12)
+
+    skew_source = np.array([1.0, 2.0, 3.0, 6.0])
+    running_skew = core.cumulative_skewness(skew_source)
+    expected_skew = np.array([0.0, 0.0, 0.0, 1.1903401282789947])
+    assert np.allclose(running_skew, expected_skew)
+
+    population_skew = core.cumulative_skewness(skew_source, unbiased=False)
+    assert math.isclose(population_skew[-1], 0.6872431934890912, rel_tol=1e-12)
+
+    running_kurtosis = core.cumulative_kurtosis(skew_source)
+    expected_kurtosis = np.array([0.0, 0.0, 0.0, 1.5])
+    assert np.allclose(running_kurtosis, expected_kurtosis)
+
+    population_kurtosis = core.cumulative_kurtosis(skew_source, unbiased=False)
+    assert math.isclose(population_kurtosis[-1], -1.0, rel_tol=1e-12)
 
 
 def test_vector_norms_and_distances() -> None:

@@ -17,6 +17,11 @@ __all__ = [
     "cumulative_product",
     "cumulative_max",
     "cumulative_min",
+    "cumulative_mean",
+    "cumulative_variance",
+    "cumulative_std",
+    "cumulative_skewness",
+    "cumulative_kurtosis",
     "first_difference",
     "moving_average",
 ]
@@ -50,10 +55,45 @@ def cumulative_min(data: ArrayLike) -> np.ndarray:
     return np.asarray(result, dtype=np.float64)
 
 
+def cumulative_mean(data: ArrayLike) -> np.ndarray:
+    """Return the cumulative (running) mean of *data*."""
+
+    result = _core().cumulative_mean(_as_array("data", data))
+    return np.asarray(result, dtype=np.float64)
+
+
+def cumulative_variance(data: ArrayLike, unbiased: bool = True) -> np.ndarray:
+    """Return the cumulative variance of *data*."""
+
+    result = _core().cumulative_variance(_as_array("data", data), unbiased=unbiased)
+    return np.asarray(result, dtype=np.float64)
+
+
 def first_difference(data: ArrayLike) -> np.ndarray:
     """Return the first difference of *data*."""
 
     result = _core().first_difference(_as_array("data", data))
+    return np.asarray(result, dtype=np.float64)
+
+
+def cumulative_std(data: ArrayLike, unbiased: bool = True) -> np.ndarray:
+    """Return the cumulative standard deviation of *data*."""
+
+    result = _core().cumulative_std(_as_array("data", data), unbiased=unbiased)
+    return np.asarray(result, dtype=np.float64)
+
+
+def cumulative_skewness(data: ArrayLike, unbiased: bool = True) -> np.ndarray:
+    """Return the cumulative skewness of *data*."""
+
+    result = _core().cumulative_skewness(_as_array("data", data), unbiased=unbiased)
+    return np.asarray(result, dtype=np.float64)
+
+
+def cumulative_kurtosis(data: ArrayLike, unbiased: bool = True) -> np.ndarray:
+    """Return the cumulative excess kurtosis of *data*."""
+
+    result = _core().cumulative_kurtosis(_as_array("data", data), unbiased=unbiased)
     return np.asarray(result, dtype=np.float64)
 
 

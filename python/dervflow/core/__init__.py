@@ -41,10 +41,15 @@ from .combinatorics import (
     stirling_number_second,
 )
 from .series import (
+    cumulative_kurtosis,
     cumulative_max,
+    cumulative_mean,
     cumulative_min,
     cumulative_product,
+    cumulative_skewness,
+    cumulative_std,
     cumulative_sum,
+    cumulative_variance,
     first_difference,
     moving_average,
 )
@@ -112,6 +117,11 @@ __all__ = [
     "cumulative_product",
     "cumulative_max",
     "cumulative_min",
+    "cumulative_mean",
+    "cumulative_variance",
+    "cumulative_std",
+    "cumulative_skewness",
+    "cumulative_kurtosis",
     "first_difference",
     "moving_average",
     "dot",

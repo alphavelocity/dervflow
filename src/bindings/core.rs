@@ -25,9 +25,11 @@ use crate::core::combinatorics::{
     stirling_number_second as stirling_number_second_fn,
 };
 use crate::core::series::{
-    cumulative_max as cumulative_max_fn, cumulative_min as cumulative_min_fn,
-    cumulative_product as cumulative_product_fn, cumulative_sum as cumulative_sum_fn,
-    first_difference as first_difference_fn,
+    cumulative_kurtosis as cumulative_kurtosis_fn, cumulative_max as cumulative_max_fn,
+    cumulative_mean as cumulative_mean_fn, cumulative_min as cumulative_min_fn,
+    cumulative_product as cumulative_product_fn, cumulative_skewness as cumulative_skewness_fn,
+    cumulative_std as cumulative_std_fn, cumulative_sum as cumulative_sum_fn,
+    cumulative_variance as cumulative_variance_fn, first_difference as first_difference_fn,
 };
 use crate::core::stat::{
     central_moment as central_moment_fn, coefficient_of_variation as coefficient_of_variation_fn,
@@ -469,12 +471,65 @@ impl PyCore {
         Ok(PyArray1::from_vec(py, values))
     }
 
+    fn cumulative_mean<'py>(
+        &self,
+        py: Python<'py>,
+        data: PyReadonlyArray1<f64>,
+    ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+        let values = cumulative_mean_fn(data.as_slice()?).map_err(to_py_err)?;
+        Ok(PyArray1::from_vec(py, values))
+    }
+
+    #[pyo3(signature = (data, unbiased=true))]
+    fn cumulative_variance<'py>(
+        &self,
+        py: Python<'py>,
+        data: PyReadonlyArray1<f64>,
+        unbiased: bool,
+    ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+        let values = cumulative_variance_fn(data.as_slice()?, unbiased).map_err(to_py_err)?;
+        Ok(PyArray1::from_vec(py, values))
+    }
+
     fn first_difference<'py>(
         &self,
         py: Python<'py>,
         data: PyReadonlyArray1<f64>,
     ) -> PyResult<Bound<'py, PyArray1<f64>>> {
         let values = first_difference_fn(data.as_slice()?).map_err(to_py_err)?;
+        Ok(PyArray1::from_vec(py, values))
+    }
+
+    #[pyo3(signature = (data, unbiased=true))]
+    fn cumulative_std<'py>(
+        &self,
+        py: Python<'py>,
+        data: PyReadonlyArray1<f64>,
+        unbiased: bool,
+    ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+        let values = cumulative_std_fn(data.as_slice()?, unbiased).map_err(to_py_err)?;
+        Ok(PyArray1::from_vec(py, values))
+    }
+
+    #[pyo3(signature = (data, unbiased=true))]
+    fn cumulative_skewness<'py>(
+        &self,
+        py: Python<'py>,
+        data: PyReadonlyArray1<f64>,
+        unbiased: bool,
+    ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+        let values = cumulative_skewness_fn(data.as_slice()?, unbiased).map_err(to_py_err)?;
+        Ok(PyArray1::from_vec(py, values))
+    }
+
+    #[pyo3(signature = (data, unbiased=true))]
+    fn cumulative_kurtosis<'py>(
+        &self,
+        py: Python<'py>,
+        data: PyReadonlyArray1<f64>,
+        unbiased: bool,
+    ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+        let values = cumulative_kurtosis_fn(data.as_slice()?, unbiased).map_err(to_py_err)?;
         Ok(PyArray1::from_vec(py, values))
     }
 
