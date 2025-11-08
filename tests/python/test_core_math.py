@@ -33,7 +33,7 @@ def test_stat_enhancements() -> None:
 
     with pytest.raises(ValueError):
         core.coefficient_of_variation([-1.0, 1.0])
-    
+
     running_mean = core.cumulative_mean(data)
     assert np.allclose(running_mean, np.array([1.0, 1.5, 2.0, 2.5]))
 

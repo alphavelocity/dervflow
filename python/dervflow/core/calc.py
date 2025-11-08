@@ -127,7 +127,9 @@ def normalized_gradient(
     return normalized_arr.reshape(-1, len(dims))
 
 
-def gradient_magnitude(values: ArrayLike, shape: Sequence[int], spacings: Sequence[float]) -> np.ndarray:
+def gradient_magnitude(
+    values: ArrayLike, shape: Sequence[int], spacings: Sequence[float]
+) -> np.ndarray:
     """Return the magnitude of the gradient of a scalar field."""
 
     arr = _as_array("values", values)

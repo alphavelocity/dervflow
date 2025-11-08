@@ -359,11 +359,7 @@ mod tests {
         assert_abs_diff_eq!(skewness[0], 0.0, epsilon = 1e-12);
         assert_abs_diff_eq!(skewness[1], 0.0, epsilon = 1e-12);
         assert_abs_diff_eq!(skewness[2], 0.0, epsilon = 1e-12);
-        assert_abs_diff_eq!(
-            skewness[3],
-            1.190_340_128_278_994_7,
-            epsilon = 1e-12
-        );
+        assert_abs_diff_eq!(skewness[3], 1.190_340_128_278_994_7, epsilon = 1e-12);
     }
 
     #[test]

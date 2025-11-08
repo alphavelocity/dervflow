@@ -407,9 +407,7 @@ def test_value_at_risk_confidence_level_variants():
     returns = np.array([0.01, -0.02, 0.015, -0.005])
     baseline = utils.value_at_risk(returns, confidence_level=0.975)
     for variant in ("0.975", "97.5", "97.5%", Decimal("0.975"), Decimal("97.5")):
-        assert math.isclose(
-            utils.value_at_risk(returns, confidence_level=variant), baseline
-        )
+        assert math.isclose(utils.value_at_risk(returns, confidence_level=variant), baseline)
 
 
 @pytest.mark.parametrize(
@@ -471,7 +469,7 @@ def test_value_at_risk_ewma_matches_manual_formula():
 
     variance = returns[0] ** 2
     for ret in returns[1:]:
-        variance = decay * variance + (1 - decay) * (ret ** 2)
+        variance = decay * variance + (1 - decay) * (ret**2)
     sigma = math.sqrt(variance)
     alpha = 1 - confidence
     z = NormalDist().inv_cdf(alpha)
@@ -531,7 +529,7 @@ def test_conditional_value_at_risk_ewma_matches_closed_form():
 
     variance = returns[0] ** 2
     for value in returns[1:]:
-        variance = decay * variance + (1 - decay) * (value ** 2)
+        variance = decay * variance + (1 - decay) * (value**2)
     sigma = math.sqrt(variance)
     alpha = 1 - confidence
     z = NormalDist().inv_cdf(alpha)

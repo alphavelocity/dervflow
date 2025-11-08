@@ -147,12 +147,8 @@ class PortfolioOptimizer:
             # Historical returns provided – delegate statistics computation to Rust
             self._optimizer = _PortfolioOptimizer(returns_array)
 
-        self.expected_returns = np.asarray(
-            self._optimizer.expected_returns, dtype=np.float64
-        )
-        self.covariance = np.asarray(
-            self._optimizer.covariance_matrix, dtype=np.float64
-        )
+        self.expected_returns = np.asarray(self._optimizer.expected_returns, dtype=np.float64)
+        self.covariance = np.asarray(self._optimizer.covariance_matrix, dtype=np.float64)
         self.n_assets = int(self._optimizer.num_assets)
 
     def optimize(

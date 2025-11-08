@@ -94,7 +94,7 @@ class TestVaRCalculations:
 
         variance = returns[0] ** 2
         for value in returns[1:]:
-            variance = decay * variance + (1 - decay) * (value ** 2)
+            variance = decay * variance + (1 - decay) * (value**2)
         sigma = math.sqrt(variance)
         alpha = 1 - confidence
         z = NormalDist().inv_cdf(alpha)
