@@ -44,7 +44,7 @@ numpy = { version = "0.27", optional = true }
 
 # Numerical computing
 nalgebra = { version = "0.34", features = ["serde-serialize"] }
-ndarray = { version = "0.16", features = ["rayon", "serde"] }
+ndarray = { version = "0.17", features = ["rayon", "serde"] }
 rand = "0.9"
 rand_distr = "0.5"
 rand_chacha = "0.9"
