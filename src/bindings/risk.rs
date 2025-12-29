@@ -17,7 +17,9 @@ use crate::risk::greeks::{
     calculate_portfolio_extended_greeks, calculate_portfolio_greeks,
 };
 use crate::risk::portfolio_risk::{
-    PortfolioSummary, portfolio_parametric_cvar, portfolio_parametric_var, portfolio_summary,
+    ActivePortfolioMetrics, CapmMetrics, PortfolioSummary, portfolio_parametric_cvar,
+    portfolio_parametric_cvar_contributions, portfolio_parametric_var,
+    portfolio_parametric_var_contributions, portfolio_summary,
 };
 use crate::risk::var::{
     cornish_fisher_var, historical_cvar, historical_var, monte_carlo_cvar, monte_carlo_var,
@@ -427,6 +429,70 @@ fn portfolio_summary_to_dict(py: Python, summary: PortfolioSummary) -> PyResult<
     Ok(dict.into())
 }
 
+fn active_metrics_to_dict(py: Python, metrics: ActivePortfolioMetrics) -> PyResult<Py<PyAny>> {
+    let dict = PyDict::new(py);
+    dict.set_item(
+        "active_weights",
+        PyArray1::from_vec(py, metrics.active_weights).unbind(),
+    )?;
+    dict.set_item("active_return", metrics.active_return)?;
+    dict.set_item("portfolio_return", metrics.portfolio_return)?;
+    dict.set_item("benchmark_return", metrics.benchmark_return)?;
+    dict.set_item("tracking_error", metrics.tracking_error)?;
+    dict.set_item("information_ratio", metrics.information_ratio)?;
+    dict.set_item("active_share", metrics.active_share)?;
+
+    let contributions = PyDict::new(py);
+    contributions.set_item(
+        "marginal",
+        PyArray1::from_vec(py, metrics.marginal_tracking_error).unbind(),
+    )?;
+    contributions.set_item(
+        "component",
+        PyArray1::from_vec(py, metrics.component_tracking_error).unbind(),
+    )?;
+    contributions.set_item(
+        "percentage",
+        PyArray1::from_vec(py, metrics.percentage_tracking_error).unbind(),
+    )?;
+    dict.set_item("tracking_error_contributions", contributions)?;
+
+    if let Some((marginal, component, percentage)) = metrics.active_return_contributions {
+        let active_contributions = PyDict::new(py);
+        active_contributions.set_item("marginal", PyArray1::from_vec(py, marginal).unbind())?;
+        active_contributions.set_item("component", PyArray1::from_vec(py, component).unbind())?;
+        active_contributions.set_item("percentage", PyArray1::from_vec(py, percentage).unbind())?;
+        dict.set_item("active_return_contributions", active_contributions)?;
+    } else {
+        dict.set_item("active_return_contributions", py.None())?;
+    }
+
+    Ok(dict.into())
+}
+
+fn capm_metrics_to_dict(py: Python, metrics: CapmMetrics) -> PyResult<Py<PyAny>> {
+    let dict = PyDict::new(py);
+    dict.set_item("portfolio_return", metrics.portfolio_return)?;
+    dict.set_item("portfolio_excess_return", metrics.portfolio_excess_return)?;
+    dict.set_item("benchmark_return", metrics.benchmark_return)?;
+    dict.set_item("benchmark_excess_return", metrics.benchmark_excess_return)?;
+    dict.set_item("beta", metrics.beta)?;
+    dict.set_item("alpha", metrics.alpha)?;
+    Ok(dict.into())
+}
+
+fn contributions_to_dict(
+    py: Python,
+    contributions: (Vec<f64>, Vec<f64>, Vec<f64>),
+) -> PyResult<Py<PyAny>> {
+    let (marginal, component, percentage) = contributions;
+    let dict = PyDict::new(py);
+    dict.set_item("marginal", PyArray1::from_vec(py, marginal).unbind())?;
+    dict.set_item("component", PyArray1::from_vec(py, component).unbind())?;
+    dict.set_item("percentage", PyArray1::from_vec(py, percentage).unbind())?;
+    Ok(dict.into())
+}
+
 fn array2_to_dmatrix(array: PyReadonlyArray2<f64>) -> PyResult<DMatrix<f64>> {
     let array_view = array.as_array();
     let (rows, cols) = (array_view.shape()[0], array_view.shape()[1]);
@@ -750,6 +816,114 @@ impl PyRiskMetrics {
         portfolio_summary_to_dict(py, summary)
     }
 
+    /// Compute portfolio tracking error relative to a benchmark weight vector.
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (weights, benchmark_weights, covariance))]
+    fn portfolio_tracking_error(
+        &self,
+        weights: PyReadonlyArray1<f64>,
+        benchmark_weights: PyReadonlyArray1<f64>,
+        covariance: PyReadonlyArray2<f64>,
+    ) -> PyResult<f64> {
+        let weights_vec = weights.as_slice()?.to_vec();
+        let benchmark_vec = benchmark_weights.as_slice()?.to_vec();
+        let covariance_matrix = array2_to_dmatrix(covariance)?;
+
+        crate::risk::portfolio_risk::portfolio_tracking_error(
+            &weights_vec,
+            &benchmark_vec,
+            &covariance_matrix,
+        )
+        .map_err(PyErr::from)
+    }
+
+    /// Compute active risk metrics relative to a benchmark portfolio.
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (weights, benchmark_weights, covariance, expected_returns=None))]
+    fn active_portfolio_metrics(
+        &self,
+        py: Python<'_>,
+        weights: PyReadonlyArray1<f64>,
+        benchmark_weights: PyReadonlyArray1<f64>,
+        covariance: PyReadonlyArray2<f64>,
+        expected_returns: Option<PyReadonlyArray1<f64>>,
+    ) -> PyResult<Py<PyAny>> {
+        let weights_vec = weights.as_slice()?.to_vec();
+        let benchmark_vec = benchmark_weights.as_slice()?.to_vec();
+        let covariance_matrix = array2_to_dmatrix(covariance)?;
+        let expected_returns_vec = match expected_returns {
+            Some(arr) => Some(arr.as_slice()?.to_vec()),
+            None => None,
+        };
+
+        let metrics = crate::risk::portfolio_risk::active_portfolio_metrics(
+            &weights_vec,
+            &benchmark_vec,
+            &covariance_matrix,
+            expected_returns_vec.as_deref(),
+        )
+        .map_err(PyErr::from)?;
+
+        active_metrics_to_dict(py, metrics)
+    }
+
+    /// Calculate the active share of the portfolio relative to the benchmark.
+    #[pyo3(signature = (weights, benchmark_weights))]
+    fn portfolio_active_share(
+        &self,
+        weights: PyReadonlyArray1<f64>,
+        benchmark_weights: PyReadonlyArray1<f64>,
+    ) -> PyResult<f64> {
+        let weights_vec = weights.as_slice()?.to_vec();
+        let benchmark_vec = benchmark_weights.as_slice()?.to_vec();
+        crate::risk::portfolio_risk::portfolio_active_share(&weights_vec, &benchmark_vec)
+            .map_err(PyErr::from)
+    }
+
+    /// Compute portfolio beta relative to a benchmark given asset covariances.
+    #[pyo3(signature = (weights, asset_benchmark_covariances, benchmark_variance))]
+    fn portfolio_beta(
+        &self,
+        weights: PyReadonlyArray1<f64>,
+        asset_benchmark_covariances: PyReadonlyArray1<f64>,
+        benchmark_variance: f64,
+    ) -> PyResult<f64> {
+        let weights_vec = weights.as_slice()?.to_vec();
+        let cov_vec = asset_benchmark_covariances.as_slice()?.to_vec();
+        crate::risk::portfolio_risk::portfolio_beta(&weights_vec, &cov_vec, benchmark_variance)
+            .map_err(PyErr::from)
+    }
+
+    /// Compute CAPM alpha, beta and excess return metrics for the portfolio.
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (weights, expected_returns, benchmark_return, risk_free_rate, asset_benchmark_covariances, benchmark_variance))]
+    fn capm_metrics(
+        &self,
+        py: Python<'_>,
+        weights: PyReadonlyArray1<f64>,
+        expected_returns: PyReadonlyArray1<f64>,
+        benchmark_return: f64,
+        risk_free_rate: f64,
+        asset_benchmark_covariances: PyReadonlyArray1<f64>,
+        benchmark_variance: f64,
+    ) -> PyResult<Py<PyAny>> {
+        let weights_vec = weights.as_slice()?.to_vec();
+        let expected_returns_vec = expected_returns.as_slice()?.to_vec();
+        let cov_vec = asset_benchmark_covariances.as_slice()?.to_vec();
+
+        let metrics = crate::risk::portfolio_risk::capm_metrics(
+            &weights_vec,
+            &expected_returns_vec,
+            benchmark_return,
+            risk_free_rate,
+            &cov_vec,
+            benchmark_variance,
+        )
+        .map_err(PyErr::from)?;
+
+        capm_metrics_to_dict(py, metrics)
+    }
+
     /// Portfolio Value at Risk using the variance-covariance method.
     #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (weights, covariance, confidence_level=0.95, expected_returns=None))]
@@ -776,6 +950,35 @@ impl PyRiskMetrics {
         .map_err(PyErr::from)
     }
 
+    /// Portfolio Value at Risk contributions using the variance-covariance method.
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (weights, covariance, confidence_level=0.95, expected_returns=None))]
+    fn portfolio_var_contributions_parametric(
+        &self,
+        py: Python<'_>,
+        weights: PyReadonlyArray1<f64>,
+        covariance: PyReadonlyArray2<f64>,
+        confidence_level: f64,
+        expected_returns: Option<PyReadonlyArray1<f64>>,
+    ) -> PyResult<Py<PyAny>> {
+        let weights_vec = weights.as_slice()?.to_vec();
+        let covariance_matrix = array2_to_dmatrix(covariance)?;
+        let expected_returns_vec = match expected_returns {
+            Some(arr) => Some(arr.as_slice()?.to_vec()),
+            None => None,
+        };
+
+        let contributions = portfolio_parametric_var_contributions(
+            &weights_vec,
+            &covariance_matrix,
+            expected_returns_vec.as_deref(),
+            confidence_level,
+        )
+        .map_err(PyErr::from)?;
+
+        contributions_to_dict(py, contributions)
+    }
+
     /// Portfolio Conditional Value at Risk using the variance-covariance method.
     #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (weights, covariance, confidence_level=0.95, expected_returns=None))]
@@ -800,6 +1003,35 @@ impl PyRiskMetrics {
             confidence_level,
         )
         .map_err(PyErr::from)
+    }
+
+    /// Portfolio CVaR contributions using the variance-covariance method.
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (weights, covariance, confidence_level=0.95, expected_returns=None))]
+    fn portfolio_cvar_contributions_parametric(
+        &self,
+        py: Python<'_>,
+        weights: PyReadonlyArray1<f64>,
+        covariance: PyReadonlyArray2<f64>,
+        confidence_level: f64,
+        expected_returns: Option<PyReadonlyArray1<f64>>,
+    ) -> PyResult<Py<PyAny>> {
+        let weights_vec = weights.as_slice()?.to_vec();
+        let covariance_matrix = array2_to_dmatrix(covariance)?;
+        let expected_returns_vec = match expected_returns {
+            Some(arr) => Some(arr.as_slice()?.to_vec()),
+            None => None,
+        };
+
+        let contributions = portfolio_parametric_cvar_contributions(
+            &weights_vec,
+            &covariance_matrix,
+            expected_returns_vec.as_deref(),
+            confidence_level,
+        )
+        .map_err(PyErr::from)?;
+
+        contributions_to_dict(py, contributions)
     }
 
     /// Calculate Sortino ratio

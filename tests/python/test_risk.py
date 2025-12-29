@@ -411,13 +411,18 @@ class TestPortfolioRiskMetrics:
         self.weights = np.array([0.4, 0.6])
         self.covariance = np.array([[0.04, 0.01], [0.01, 0.09]])
         self.expected_returns = np.array([0.10, 0.12])
+        self.benchmark_weights = np.array([0.5, 0.5])
+        self.asset_benchmark_covariances = np.array([0.03, 0.05])
+        self.benchmark_variance = 0.04
+        self.benchmark_return = 0.09
+        self.risk_free_rate = 0.02
 
     def test_portfolio_metrics_basic(self):
         metrics = self.rm.portfolio_metrics(
             self.weights,
             self.covariance,
             expected_returns=self.expected_returns,
-            risk_free_rate=0.02,
+            risk_free_rate=self.risk_free_rate,
         )
 
         assert metrics["volatility"] > 0.0
@@ -449,6 +454,161 @@ class TestPortfolioRiskMetrics:
 
         assert var_value >= 0.0
         assert cvar_value >= var_value
+
+    def test_parametric_var_contributions(self):
+        contributions = self.rm.portfolio_var_contributions_parametric(
+            self.weights,
+            self.covariance,
+            confidence_level=0.975,
+            expected_returns=self.expected_returns,
+        )
+
+        assert set(contributions.keys()) == {"marginal", "component", "percentage"}
+
+        var_value = self.rm.portfolio_var_parametric(
+            self.weights,
+            self.covariance,
+            confidence_level=0.975,
+            expected_returns=self.expected_returns,
+        )
+
+        np.testing.assert_allclose(
+            np.sum(contributions["component"]), var_value, atol=1e-10
+        )
+        np.testing.assert_allclose(np.sum(contributions["percentage"]), 1.0, atol=1e-10)
+
+    def test_parametric_cvar_contributions(self):
+        contributions = self.rm.portfolio_cvar_contributions_parametric(
+            self.weights,
+            self.covariance,
+            confidence_level=0.99,
+            expected_returns=self.expected_returns,
+        )
+
+        assert set(contributions.keys()) == {"marginal", "component", "percentage"}
+
+        cvar_value = self.rm.portfolio_cvar_parametric(
+            self.weights,
+            self.covariance,
+            confidence_level=0.99,
+            expected_returns=self.expected_returns,
+        )
+
+        np.testing.assert_allclose(
+            np.sum(contributions["component"]), cvar_value, atol=1e-10
+        )
+        np.testing.assert_allclose(np.sum(contributions["percentage"]), 1.0, atol=1e-10)
+
+    def test_portfolio_tracking_error(self):
+        tracking_error = self.rm.portfolio_tracking_error(
+            self.weights,
+            self.benchmark_weights,
+            self.covariance,
+        )
+        assert tracking_error > 0.0
+
+    def test_active_portfolio_metrics(self):
+        metrics = self.rm.active_portfolio_metrics(
+            self.weights,
+            self.benchmark_weights,
+            self.covariance,
+            expected_returns=self.expected_returns,
+        )
+
+        assert set(metrics.keys()) == {
+            "active_weights",
+            "active_return",
+            "portfolio_return",
+            "benchmark_return",
+            "tracking_error",
+            "information_ratio",
+            "active_share",
+            "tracking_error_contributions",
+            "active_return_contributions",
+        }
+        np.testing.assert_allclose(
+            metrics["active_weights"],
+            self.weights - self.benchmark_weights,
+            atol=1e-12,
+        )
+        contributions = metrics["tracking_error_contributions"]
+        assert set(contributions.keys()) == {"marginal", "component", "percentage"}
+        np.testing.assert_allclose(
+            np.sum(contributions["component"]),
+            metrics["tracking_error"],
+            atol=1e-8,
+        )
+        np.testing.assert_allclose(np.sum(contributions["percentage"]), 1.0, atol=1e-8)
+
+        assert math.isclose(
+            metrics["portfolio_return"],
+            float(np.dot(self.weights, self.expected_returns)),
+        )
+        assert math.isclose(
+            metrics["benchmark_return"],
+            float(np.dot(self.benchmark_weights, self.expected_returns)),
+        )
+
+        active_contributions = metrics["active_return_contributions"]
+        assert set(active_contributions.keys()) == {"marginal", "component", "percentage"}
+        np.testing.assert_allclose(
+            active_contributions["marginal"],
+            self.expected_returns,
+            atol=1e-12,
+        )
+        expected_component = (self.weights - self.benchmark_weights) * self.expected_returns
+        np.testing.assert_allclose(
+            active_contributions["component"],
+            expected_component,
+            atol=1e-12,
+        )
+        np.testing.assert_allclose(
+            np.sum(active_contributions["component"]),
+            metrics["active_return"],
+            atol=1e-12,
+        )
+        if abs(metrics["active_return"]) > 1e-12:
+            np.testing.assert_allclose(
+                np.sum(active_contributions["percentage"]),
+                1.0,
+                atol=1e-10,
+            )
+
+    def test_portfolio_active_share(self):
+        active_share = self.rm.portfolio_active_share(
+            self.weights,
+            self.benchmark_weights,
+        )
+        expected_active_share = 0.5 * np.sum(np.abs(self.weights - self.benchmark_weights))
+        assert math.isclose(active_share, expected_active_share)
+
+    def test_portfolio_beta_and_capm_metrics(self):
+        beta = self.rm.portfolio_beta(
+            self.weights,
+            self.asset_benchmark_covariances,
+            self.benchmark_variance,
+        )
+        assert beta > 0.0
+
+        metrics = self.rm.capm_metrics(
+            self.weights,
+            self.expected_returns,
+            self.benchmark_return,
+            self.risk_free_rate,
+            self.asset_benchmark_covariances,
+            self.benchmark_variance,
+        )
+
+        assert math.isclose(metrics["beta"], beta)
+        assert math.isclose(
+            metrics["portfolio_return"],
+            float(np.dot(self.weights, self.expected_returns)),
+        )
+        assert math.isclose(
+            metrics["alpha"],
+            metrics["portfolio_excess_return"]
+            - metrics["beta"] * (self.benchmark_return - self.risk_free_rate),
+        )
 
 
 if __name__ == "__main__":
