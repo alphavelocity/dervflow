@@ -26,10 +26,13 @@ Features
 - Portfolio-level Greeks aggregation
 - Value at Risk (VaR) using historical simulation, variance-covariance, and Monte Carlo
 - Conditional Value at Risk (CVaR) / Expected Shortfall
+- Decomposition of parametric VaR and CVaR into marginal/component contributions
 - Maximum drawdown calculation
 - Sortino ratio and other risk-adjusted performance metrics
 - Numerical Greeks using finite differences with configurable precision
 - Portfolio risk decomposition (volatility, risk contributions, diversification ratios)
+- Active risk analytics (tracking error, information ratio, active share) and CAPM metrics
+ - Active risk analytics (tracking error, information ratio, active share) with active-return decomposition and CAPM metrics
 
 Examples
 --------
