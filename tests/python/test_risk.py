@@ -472,9 +472,7 @@ class TestPortfolioRiskMetrics:
             expected_returns=self.expected_returns,
         )
 
-        np.testing.assert_allclose(
-            np.sum(contributions["component"]), var_value, atol=1e-10
-        )
+        np.testing.assert_allclose(np.sum(contributions["component"]), var_value, atol=1e-10)
         np.testing.assert_allclose(np.sum(contributions["percentage"]), 1.0, atol=1e-10)
 
     def test_parametric_cvar_contributions(self):
@@ -494,9 +492,7 @@ class TestPortfolioRiskMetrics:
             expected_returns=self.expected_returns,
         )
 
-        np.testing.assert_allclose(
-            np.sum(contributions["component"]), cvar_value, atol=1e-10
-        )
+        np.testing.assert_allclose(np.sum(contributions["component"]), cvar_value, atol=1e-10)
         np.testing.assert_allclose(np.sum(contributions["percentage"]), 1.0, atol=1e-10)
 
     def test_portfolio_tracking_error(self):
