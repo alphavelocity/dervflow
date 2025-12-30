@@ -188,6 +188,26 @@ class TestCVaRCalculations:
 
         assert "cvar" in result
         assert result["cvar"] > 0.0
+        assert result["method"] == "historical"
+
+    def test_parametric_cvar_basic(self):
+        """Test parametric CVaR calculation"""
+        rm = RiskMetrics()
+
+        np.random.seed(7)
+        returns = np.random.normal(0.001, 0.02, 1000)
+
+        result = rm.cvar(returns, confidence_level=0.95, method="parametric")
+
+        mean = returns.mean()
+        std_dev = returns.std(ddof=1)
+        alpha = 1 - 0.95
+        z = NormalDist().inv_cdf(alpha)
+        pdf = math.exp(-0.5 * z**2) / math.sqrt(2 * math.pi)
+        expected = -(mean - std_dev * (pdf / alpha))
+
+        assert math.isclose(result["cvar"], expected, rel_tol=1e-6, abs_tol=1e-6)
+        assert result["method"] == "parametric"
 
     def test_cvar_greater_than_var(self):
         """Test that CVaR is at least as large as VaR"""

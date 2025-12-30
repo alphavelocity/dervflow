@@ -23,7 +23,7 @@ use crate::risk::portfolio_risk::{
 };
 use crate::risk::var::{
     cornish_fisher_var, historical_cvar, historical_var, monte_carlo_cvar, monte_carlo_var,
-    parametric_var, riskmetrics_cvar, riskmetrics_var,
+    parametric_cvar, parametric_var, riskmetrics_cvar, riskmetrics_var,
 };
 use nalgebra::DMatrix;
 
@@ -646,7 +646,7 @@ impl PyRiskMetrics {
     /// confidence_level : float
     ///     Confidence level (e.g., 0.95 for 95%)
     /// method : str, optional
-    ///     CVaR calculation method: 'historical' or 'monte_carlo' (default: 'historical')
+    ///     CVaR calculation method: 'historical', 'parametric', 'monte_carlo', or 'ewma'
     /// mean : float, optional
     ///     Expected return (required for monte_carlo method)
     /// std_dev : float, optional
@@ -698,6 +698,15 @@ impl PyRiskMetrics {
                 let returns_slice = returns.as_slice()?;
                 historical_cvar(returns_slice, confidence_level).map_err(PyErr::from)?
             }
+            "parametric" => {
+                let returns = returns.ok_or_else(|| {
+                    PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                        "returns array is required for parametric method",
+                    )
+                })?;
+                let returns_slice = returns.as_slice()?;
+                parametric_cvar(returns_slice, confidence_level).map_err(PyErr::from)?
+            }
             "monte_carlo" | "montecarlo" | "mc" => {
                 let mean = mean.ok_or_else(|| {
                     PyErr::new::<pyo3::exceptions::PyValueError, _>(
@@ -725,7 +734,7 @@ impl PyRiskMetrics {
             }
             _ => {
                 return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                    "Invalid method: '{}'. Must be 'historical', 'monte_carlo', or 'ewma'",
+                    "Invalid method: '{}'. Must be 'historical', 'parametric', 'monte_carlo', or 'ewma'",
                     method
                 )));
             }

@@ -147,30 +147,8 @@ pub fn historical_cvar(returns: &[f64], confidence_level: f64) -> Result<f64> {
 /// # Returns
 /// VaR value (positive number representing potential loss)
 pub fn parametric_var(returns: &[f64], confidence_level: f64) -> Result<f64> {
-    if returns.is_empty() {
-        return Err(DervflowError::InvalidInput(
-            "Returns array cannot be empty".to_string(),
-        ));
-    }
-
-    if confidence_level <= 0.0 || confidence_level >= 1.0 {
-        return Err(DervflowError::InvalidInput(format!(
-            "Confidence level must be between 0 and 1, got {}",
-            confidence_level
-        )));
-    }
-
-    // Calculate mean and standard deviation
-    let n = returns.len() as f64;
-    let mean: f64 = returns.iter().sum::<f64>() / n;
-    let variance: f64 = returns.iter().map(|r| (r - mean).powi(2)).sum::<f64>() / (n - 1.0);
-    let std_dev = variance.sqrt();
-
-    if std_dev.is_nan() || std_dev.is_infinite() {
-        return Err(DervflowError::NumericalError(
-            "Invalid standard deviation calculated".to_string(),
-        ));
-    }
+    validate_confidence_level(confidence_level)?;
+    let (mean, std_dev) = mean_std_dev(returns)?;
 
     // Get the z-score for the confidence level
     let alpha = 1.0 - confidence_level;
@@ -181,6 +159,29 @@ pub fn parametric_var(returns: &[f64], confidence_level: f64) -> Result<f64> {
     let var = -(mean + z_score * std_dev);
 
     Ok(var)
+}
+
+/// Calculate Conditional Value at Risk (CVaR) using parametric variance-covariance method
+///
+/// Assumes returns are normally distributed and uses the closed-form expected shortfall.
+///
+/// # Arguments
+/// * `returns` - Historical returns data
+/// * `confidence_level` - Confidence level (e.g., 0.95 for 95%)
+///
+/// # Returns
+/// CVaR value (positive number representing expected loss in the tail)
+pub fn parametric_cvar(returns: &[f64], confidence_level: f64) -> Result<f64> {
+    validate_confidence_level(confidence_level)?;
+    let (mean, std_dev) = mean_std_dev(returns)?;
+
+    let alpha = 1.0 - confidence_level;
+    let z = inverse_normal_cdf(alpha)?;
+    let pdf = (-0.5 * z * z).exp() / (2.0 * PI).sqrt();
+
+    let cvar = -(mean - std_dev * (pdf / alpha));
+
+    Ok(cvar)
 }
 
 /// Calculate Value at Risk using Cornish-Fisher expansion
@@ -194,24 +195,21 @@ pub fn parametric_var(returns: &[f64], confidence_level: f64) -> Result<f64> {
 /// # Returns
 /// VaR value (positive number representing potential loss)
 pub fn cornish_fisher_var(returns: &[f64], confidence_level: f64) -> Result<f64> {
-    if returns.is_empty() {
+    if returns.len() < 4 {
         return Err(DervflowError::InvalidInput(
-            "Returns array cannot be empty".to_string(),
+            "At least four observations are required for Cornish-Fisher VaR".to_string(),
         ));
     }
 
-    if confidence_level <= 0.0 || confidence_level >= 1.0 {
-        return Err(DervflowError::InvalidInput(format!(
-            "Confidence level must be between 0 and 1, got {}",
-            confidence_level
-        )));
-    }
+    validate_confidence_level(confidence_level)?;
 
     // Calculate moments
     let n = returns.len() as f64;
-    let mean: f64 = returns.iter().sum::<f64>() / n;
-    let variance: f64 = returns.iter().map(|r| (r - mean).powi(2)).sum::<f64>() / (n - 1.0);
-    let std_dev = variance.sqrt();
+    let (mean, std_dev) = mean_std_dev(returns)?;
+
+    if std_dev == 0.0 {
+        return Ok(-mean);
+    }
 
     // Calculate skewness and excess kurtosis
     let skewness: f64 = returns
@@ -226,12 +224,6 @@ pub fn cornish_fisher_var(returns: &[f64], confidence_level: f64) -> Result<f64>
         .sum::<f64>()
         / n;
     let excess_kurtosis = kurtosis - 3.0;
-
-    if std_dev.is_nan() || std_dev.is_infinite() {
-        return Err(DervflowError::NumericalError(
-            "Invalid standard deviation calculated".to_string(),
-        ));
-    }
 
     // Get the z-score for the confidence level
     let alpha = 1.0 - confidence_level;
@@ -411,6 +403,47 @@ fn validate_confidence_level(confidence_level: f64) -> Result<()> {
     Ok(())
 }
 
+fn mean_std_dev(returns: &[f64]) -> Result<(f64, f64)> {
+    if returns.len() < 2 {
+        return Err(DervflowError::InvalidInput(
+            "At least two observations are required".to_string(),
+        ));
+    }
+
+    if !returns.iter().all(|value| value.is_finite()) {
+        return Err(DervflowError::InvalidInput(
+            "Returns must contain only finite values".to_string(),
+        ));
+    }
+
+    let mut mean = 0.0;
+    let mut m2 = 0.0;
+    let mut count = 0.0;
+
+    for &value in returns {
+        count += 1.0;
+        let delta = value - mean;
+        mean += delta / count;
+        let delta2 = value - mean;
+        m2 += delta * delta2;
+    }
+
+    if count < 2.0 {
+        return Err(DervflowError::InvalidInput(
+            "At least two observations are required".to_string(),
+        ));
+    }
+
+    let variance = m2 / (count - 1.0);
+    if !variance.is_finite() || variance < 0.0 {
+        return Err(DervflowError::NumericalError(
+            "Invalid standard deviation calculated".to_string(),
+        ));
+    }
+
+    Ok((mean, variance.sqrt()))
+}
+
 fn compute_ewma_sigma(returns: &[f64], decay: f64) -> Result<f64> {
     if returns.is_empty() {
         return Err(DervflowError::InvalidInput(
@@ -555,6 +588,28 @@ mod tests {
     }
 
     #[test]
+    fn test_parametric_cvar_matches_closed_form() {
+        let returns = vec![
+            0.01, -0.01, 0.02, -0.02, 0.0, 0.01, -0.01, 0.015, -0.015, 0.005,
+        ];
+        let confidence = 0.95;
+        let cvar = parametric_cvar(&returns, confidence).unwrap();
+        let var = parametric_var(&returns, confidence).unwrap();
+
+        let n = returns.len() as f64;
+        let mean: f64 = returns.iter().sum::<f64>() / n;
+        let variance: f64 = returns.iter().map(|r| (r - mean).powi(2)).sum::<f64>() / (n - 1.0);
+        let std_dev = variance.sqrt();
+        let alpha = 1.0 - confidence;
+        let z = inverse_normal_cdf(alpha).unwrap();
+        let pdf = (-0.5 * z * z).exp() / (2.0 * std::f64::consts::PI).sqrt();
+        let expected = -(mean - std_dev * (pdf / alpha));
+
+        assert!((cvar - expected).abs() < 1e-10);
+        assert!(cvar >= var);
+    }
+
+    #[test]
     fn test_cornish_fisher_var() {
         let returns = vec![
             0.01, -0.01, 0.02, -0.02, 0.0, 0.01, -0.01, 0.015, -0.015, 0.005,
@@ -648,6 +703,13 @@ mod tests {
         assert!(historical_var(&returns, 0.0).is_err());
         assert!(historical_var(&returns, 1.0).is_err());
         assert!(historical_var(&returns, 1.5).is_err());
+
+        // Parametric methods require at least two observations
+        assert!(parametric_var(&[0.01], 0.95).is_err());
+        assert!(parametric_cvar(&[0.01], 0.95).is_err());
+
+        // Cornish-Fisher requires enough observations for higher moments
+        assert!(cornish_fisher_var(&[0.01, -0.01, 0.02], 0.95).is_err());
     }
 
     #[test]
