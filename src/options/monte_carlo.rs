@@ -57,6 +57,30 @@ fn calculate_payoff(terminal_price: f64, strike: f64, option_type: OptionType) -
     }
 }
 
+fn mean_and_standard_error(values: &[f64]) -> (f64, f64) {
+    let n = values.len() as f64;
+    if n == 0.0 {
+        return (0.0, 0.0);
+    }
+
+    let mut mean = 0.0;
+    let mut m2 = 0.0;
+    let mut count = 0.0;
+
+    for &value in values {
+        count += 1.0;
+        let delta = value - mean;
+        mean += delta / count;
+        let delta2 = value - mean;
+        m2 += delta * delta2;
+    }
+
+    let variance = if count > 1.0 { m2 / (count - 1.0) } else { 0.0 };
+    let standard_error = (variance / count).sqrt();
+
+    (mean, standard_error)
+}
+
 /// Price European option using Monte Carlo simulation
 ///
 /// Uses geometric Brownian motion to simulate price paths and calculates
@@ -111,40 +135,26 @@ pub fn price_european_monte_carlo(
         None => RandomGenerator::from_entropy(),
     };
 
-    // Determine effective number of paths
-    let effective_paths = if use_antithetic {
-        // With antithetic variates, we generate half the paths and double them
-        num_paths.div_ceil(2)
-    } else {
-        num_paths
-    };
-
     // Simulate paths and calculate payoffs
-    let mut payoffs = Vec::with_capacity(if use_antithetic {
-        effective_paths * 2
-    } else {
-        effective_paths
-    });
+    let mut payoffs = Vec::with_capacity(num_paths);
+    if use_antithetic {
+        let num_pairs = num_paths / 2;
+        let has_extra = num_paths % 2 == 1;
 
-    for _ in 0..effective_paths {
-        let z = rng.standard_normal();
+        for _ in 0..num_pairs {
+            let z = rng.standard_normal();
 
-        // Simulate terminal price
-        let terminal_price = simulate_gbm_terminal(
-            params.spot,
-            params.rate,
-            params.dividend,
-            params.volatility,
-            params.time_to_maturity,
-            z,
-        );
+            let terminal_price = simulate_gbm_terminal(
+                params.spot,
+                params.rate,
+                params.dividend,
+                params.volatility,
+                params.time_to_maturity,
+                z,
+            );
+            let payoff = calculate_payoff(terminal_price, params.strike, params.option_type);
+            payoffs.push(payoff);
 
-        // Calculate payoff
-        let payoff = calculate_payoff(terminal_price, params.strike, params.option_type);
-        payoffs.push(payoff);
-
-        // If using antithetic variates, also simulate with -z
-        if use_antithetic {
             let terminal_price_anti = simulate_gbm_terminal(
                 params.spot,
                 params.rate,
@@ -153,22 +163,42 @@ pub fn price_european_monte_carlo(
                 params.time_to_maturity,
                 -z,
             );
-
             let payoff_anti =
                 calculate_payoff(terminal_price_anti, params.strike, params.option_type);
             payoffs.push(payoff_anti);
         }
+
+        if has_extra {
+            let z = rng.standard_normal();
+            let terminal_price = simulate_gbm_terminal(
+                params.spot,
+                params.rate,
+                params.dividend,
+                params.volatility,
+                params.time_to_maturity,
+                z,
+            );
+            let payoff = calculate_payoff(terminal_price, params.strike, params.option_type);
+            payoffs.push(payoff);
+        }
+    } else {
+        for _ in 0..num_paths {
+            let z = rng.standard_normal();
+            let terminal_price = simulate_gbm_terminal(
+                params.spot,
+                params.rate,
+                params.dividend,
+                params.volatility,
+                params.time_to_maturity,
+                z,
+            );
+            let payoff = calculate_payoff(terminal_price, params.strike, params.option_type);
+            payoffs.push(payoff);
+        }
     }
 
     // Calculate mean and standard error
-    let n = payoffs.len() as f64;
-    let mean_payoff: f64 = payoffs.iter().sum::<f64>() / n;
-    let variance: f64 = payoffs
-        .iter()
-        .map(|p| (p - mean_payoff).powi(2))
-        .sum::<f64>()
-        / (n - 1.0);
-    let standard_error = (variance / n).sqrt();
+    let (mean_payoff, standard_error) = mean_and_standard_error(&payoffs);
 
     // Discount to present value
     let discount_factor = (-params.rate * params.time_to_maturity).exp();
@@ -216,38 +246,27 @@ pub fn price_european_monte_carlo_parallel(
         return Ok(MonteCarloResult::new(intrinsic, 0.0));
     }
 
-    // Determine effective number of paths
-    let effective_paths = if use_antithetic {
-        num_paths.div_ceil(2)
-    } else {
-        num_paths
-    };
-
     // Simulate paths in parallel
-    let payoffs: Vec<f64> = (0..effective_paths)
-        .into_par_iter()
-        .flat_map(|i| {
-            // Create thread-local RNG with unique seed
-            let thread_seed = seed.unwrap_or(0).wrapping_add(i as u64);
-            let mut rng = RandomGenerator::new(thread_seed);
+    let base_seed = seed.unwrap_or(0);
+    let mut payoffs: Vec<f64> = if use_antithetic {
+        let num_pairs = num_paths / 2;
+        (0..num_pairs)
+            .into_par_iter()
+            .flat_map(|i| {
+                let thread_seed = base_seed.wrapping_add(i as u64);
+                let mut rng = RandomGenerator::new(thread_seed);
 
-            let z = rng.standard_normal();
+                let z = rng.standard_normal();
+                let terminal_price = simulate_gbm_terminal(
+                    params.spot,
+                    params.rate,
+                    params.dividend,
+                    params.volatility,
+                    params.time_to_maturity,
+                    z,
+                );
+                let payoff = calculate_payoff(terminal_price, params.strike, params.option_type);
 
-            // Simulate terminal price
-            let terminal_price = simulate_gbm_terminal(
-                params.spot,
-                params.rate,
-                params.dividend,
-                params.volatility,
-                params.time_to_maturity,
-                z,
-            );
-
-            // Calculate payoff
-            let payoff = calculate_payoff(terminal_price, params.strike, params.option_type);
-
-            // If using antithetic variates, also simulate with -z
-            if use_antithetic {
                 let terminal_price_anti = simulate_gbm_terminal(
                     params.spot,
                     params.rate,
@@ -256,25 +275,53 @@ pub fn price_european_monte_carlo_parallel(
                     params.time_to_maturity,
                     -z,
                 );
-
                 let payoff_anti =
                     calculate_payoff(terminal_price_anti, params.strike, params.option_type);
                 vec![payoff, payoff_anti]
-            } else {
-                vec![payoff]
-            }
-        })
-        .collect();
+            })
+            .collect()
+    } else {
+        (0..num_paths)
+            .into_par_iter()
+            .map(|i| {
+                let thread_seed = base_seed.wrapping_add(i as u64);
+                let mut rng = RandomGenerator::new(thread_seed);
+
+                let z = rng.standard_normal();
+                let terminal_price = simulate_gbm_terminal(
+                    params.spot,
+                    params.rate,
+                    params.dividend,
+                    params.volatility,
+                    params.time_to_maturity,
+                    z,
+                );
+                calculate_payoff(terminal_price, params.strike, params.option_type)
+            })
+            .collect()
+    };
+
+    if use_antithetic && num_paths % 2 == 1 {
+        let thread_seed = base_seed.wrapping_add((num_paths / 2) as u64);
+        let mut rng = RandomGenerator::new(thread_seed);
+        let z = rng.standard_normal();
+        let terminal_price = simulate_gbm_terminal(
+            params.spot,
+            params.rate,
+            params.dividend,
+            params.volatility,
+            params.time_to_maturity,
+            z,
+        );
+        payoffs.push(calculate_payoff(
+            terminal_price,
+            params.strike,
+            params.option_type,
+        ));
+    }
 
     // Calculate mean and standard error
-    let n = payoffs.len() as f64;
-    let mean_payoff: f64 = payoffs.iter().sum::<f64>() / n;
-    let variance: f64 = payoffs
-        .iter()
-        .map(|p| (p - mean_payoff).powi(2))
-        .sum::<f64>()
-        / (n - 1.0);
-    let standard_error = (variance / n).sqrt();
+    let (mean_payoff, standard_error) = mean_and_standard_error(&payoffs);
 
     // Discount to present value
     let discount_factor = (-params.rate * params.time_to_maturity).exp();
@@ -315,16 +362,11 @@ fn simulate_gbm_path(
 ///
 /// Uses least squares regression with polynomial basis functions:
 /// 1, x, x^2, x^3 where x is the normalized stock price
-fn polynomial_regression(x: &[f64], y: &[f64], degree: usize) -> Vec<f64> {
+fn polynomial_regression(x: &[f64], y: &[f64], degree: usize, x_mean: f64, x_std: f64) -> Vec<f64> {
     let n = x.len();
     if n == 0 || n != y.len() {
         return vec![0.0; degree + 1];
     }
-
-    // Normalize x values to improve numerical stability
-    let x_mean: f64 = x.iter().sum::<f64>() / n as f64;
-    let x_std: f64 = (x.iter().map(|xi| (xi - x_mean).powi(2)).sum::<f64>() / n as f64).sqrt();
-    let x_std = if x_std < 1e-10 { 1.0 } else { x_std };
 
     // Build design matrix A where A[i][j] = x[i]^j (normalized)
     let mut a = vec![vec![0.0; degree + 1]; n];
@@ -507,6 +549,7 @@ pub fn price_american_monte_carlo(
     // Backward induction through time steps
     let dt = params.time_to_maturity / num_steps as f64;
     let discount = (-params.rate * dt).exp();
+    let mut in_the_money = vec![false; num_paths];
 
     for step in (1..num_steps).rev() {
         // Collect in-the-money paths for regression
@@ -536,7 +579,7 @@ pub fn price_american_monte_carlo(
             let x_std = if x_std < 1e-10 { 1.0 } else { x_std };
 
             // Perform polynomial regression (degree 3)
-            let coeffs = polynomial_regression(&itm_prices, &itm_continuation, 3);
+            let coeffs = polynomial_regression(&itm_prices, &itm_continuation, 3, x_mean, x_std);
 
             // Update cash flows based on optimal exercise decision
             for (idx, &path_idx) in itm_indices.iter().enumerate() {
@@ -553,10 +596,13 @@ pub fn price_american_monte_carlo(
                 }
             }
 
-            // Discount cash flows for paths not in the money
-            for (i, _) in paths.iter().enumerate() {
-                if !itm_indices.contains(&i) {
-                    cash_flows[i] *= discount;
+            in_the_money.fill(false);
+            for &idx in &itm_indices {
+                in_the_money[idx] = true;
+            }
+            for (i, cash_flow) in cash_flows.iter_mut().enumerate() {
+                if !in_the_money[i] {
+                    *cash_flow *= discount;
                 }
             }
         } else {
@@ -573,14 +619,7 @@ pub fn price_american_monte_carlo(
     }
 
     // Calculate mean and standard error
-    let n = cash_flows.len() as f64;
-    let mean_price: f64 = cash_flows.iter().sum::<f64>() / n;
-    let variance: f64 = cash_flows
-        .iter()
-        .map(|p| (p - mean_price).powi(2))
-        .sum::<f64>()
-        / (n - 1.0);
-    let standard_error = (variance / n).sqrt();
+    let (mean_price, standard_error) = mean_and_standard_error(&cash_flows);
 
     Ok(MonteCarloResult::new(mean_price, standard_error))
 }
@@ -661,6 +700,7 @@ pub fn price_american_monte_carlo_parallel(
     // Backward induction through time steps (sequential)
     let dt = params.time_to_maturity / num_steps as f64;
     let discount = (-params.rate * dt).exp();
+    let mut in_the_money = vec![false; num_paths];
 
     for step in (1..num_steps).rev() {
         // Collect in-the-money paths for regression
@@ -687,7 +727,7 @@ pub fn price_american_monte_carlo_parallel(
                 .sqrt();
             let x_std = if x_std < 1e-10 { 1.0 } else { x_std };
 
-            let coeffs = polynomial_regression(&itm_prices, &itm_continuation, 3);
+            let coeffs = polynomial_regression(&itm_prices, &itm_continuation, 3, x_mean, x_std);
 
             for (idx, &path_idx) in itm_indices.iter().enumerate() {
                 let price = itm_prices[idx];
@@ -701,9 +741,13 @@ pub fn price_american_monte_carlo_parallel(
                 }
             }
 
-            for (i, _) in paths.iter().enumerate() {
-                if !itm_indices.contains(&i) {
-                    cash_flows[i] *= discount;
+            in_the_money.fill(false);
+            for &idx in &itm_indices {
+                in_the_money[idx] = true;
+            }
+            for (i, cash_flow) in cash_flows.iter_mut().enumerate() {
+                if !in_the_money[i] {
+                    *cash_flow *= discount;
                 }
             }
         } else {
@@ -719,14 +763,7 @@ pub fn price_american_monte_carlo_parallel(
     }
 
     // Calculate mean and standard error
-    let n = cash_flows.len() as f64;
-    let mean_price: f64 = cash_flows.iter().sum::<f64>() / n;
-    let variance: f64 = cash_flows
-        .iter()
-        .map(|p| (p - mean_price).powi(2))
-        .sum::<f64>()
-        / (n - 1.0);
-    let standard_error = (variance / n).sqrt();
+    let (mean_price, standard_error) = mean_and_standard_error(&cash_flows);
 
     Ok(MonteCarloResult::new(mean_price, standard_error))
 }
