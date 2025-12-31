@@ -20,8 +20,8 @@
 
 use crate::common::error::{DervflowError, Result};
 use crate::risk::portfolio_risk::{
-    PortfolioSummary, portfolio_parametric_cvar, portfolio_parametric_var, portfolio_summary,
-    risk_contributions as portfolio_risk_contributions,
+    PortfolioSummary, portfolio_parametric_cvar, portfolio_parametric_var, portfolio_return,
+    portfolio_summary, portfolio_volatility, risk_contributions as portfolio_risk_contributions,
 };
 use nalgebra::{DMatrix, DVector};
 use osqp::{CscMatrix, Problem, Settings};
@@ -79,13 +79,26 @@ impl OptimizationResult {
         covariance: &DMatrix<f64>,
         risk_free_rate: Option<f64>,
         status: String,
-    ) -> Self {
-        let expected_return = calculate_portfolio_return(&weights, expected_returns);
-        let volatility = calculate_portfolio_volatility(&weights, covariance);
-        let sharpe_ratio = risk_free_rate
-            .map(|rf| calculate_portfolio_sharpe_ratio(&weights, expected_returns, covariance, rf));
+    ) -> Result<Self> {
+        let expected_return = calculate_portfolio_return(&weights, expected_returns)?;
+        let volatility = calculate_portfolio_volatility(&weights, covariance)?;
+        let sharpe_ratio = match risk_free_rate {
+            Some(rf) => Some(calculate_portfolio_sharpe_ratio(
+                &weights,
+                expected_returns,
+                covariance,
+                rf,
+            )?),
+            None => None,
+        };
 
-        Self::new(weights, expected_return, volatility, sharpe_ratio, status)
+        Ok(Self::new(
+            weights,
+            expected_return,
+            volatility,
+            sharpe_ratio,
+            status,
+        ))
     }
 }
 
@@ -280,13 +293,7 @@ impl MeanVarianceOptimizer {
             .x()
             .ok_or_else(|| DervflowError::OptimizationInfeasible("No solution found".to_string()))?
             .to_vec();
-        Ok(OptimizationResult::from_weights(
-            weights,
-            &self.expected_returns,
-            &self.covariance,
-            None,
-            format!("{:?}", result),
-        ))
+        self.build_result(weights, None, format!("{:?}", result))
     }
 
     /// Maximize portfolio return for a given target variance
@@ -455,13 +462,7 @@ impl MeanVarianceOptimizer {
             .x()
             .ok_or_else(|| DervflowError::OptimizationInfeasible("No solution found".to_string()))?
             .to_vec();
-        Ok(OptimizationResult::from_weights(
-            weights,
-            &self.expected_returns,
-            &self.covariance,
-            Some(risk_free_rate),
-            format!("{:?}", result),
-        ))
+        self.build_result(weights, Some(risk_free_rate), format!("{:?}", result))
     }
 
     /// Minimize portfolio variance without return constraint
@@ -534,13 +535,7 @@ impl MeanVarianceOptimizer {
             .x()
             .ok_or_else(|| DervflowError::OptimizationInfeasible("No solution found".to_string()))?
             .to_vec();
-        Ok(OptimizationResult::from_weights(
-            weights,
-            &self.expected_returns,
-            &self.covariance,
-            None,
-            format!("{:?}", result),
-        ))
+        self.build_result(weights, None, format!("{:?}", result))
     }
 
     /// Convert covariance matrix to CSC format for OSQP
@@ -572,8 +567,12 @@ impl MeanVarianceOptimizer {
         }
     }
 
-    /// Compute the Sharpe ratio for a given set of weights and risk-free rate.
-    pub fn sharpe_ratio(&self, weights: &[f64], risk_free_rate: f64) -> Result<f64> {
+    fn build_result(
+        &self,
+        weights: Vec<f64>,
+        risk_free_rate: Option<f64>,
+        status: String,
+    ) -> Result<OptimizationResult> {
         if weights.len() != self.n_assets {
             return Err(DervflowError::InvalidInput(format!(
                 "Weight vector length ({}) does not match number of assets ({})",
@@ -582,12 +581,59 @@ impl MeanVarianceOptimizer {
             )));
         }
 
-        Ok(calculate_portfolio_sharpe_ratio(
+        let expected_return: f64 = weights
+            .iter()
+            .zip(self.expected_returns.iter())
+            .map(|(w, r)| w * r)
+            .sum();
+
+        if !expected_return.is_finite() {
+            return Err(DervflowError::NumericalError(
+                "Computed non-finite expected return".to_string(),
+            ));
+        }
+
+        let w = DVector::from_column_slice(&weights);
+        let variance = (w.transpose() * &self.covariance * &w)[(0, 0)];
+
+        if !variance.is_finite() {
+            return Err(DervflowError::NumericalError(
+                "Computed non-finite portfolio variance".to_string(),
+            ));
+        }
+
+        if variance.is_sign_negative() && variance.abs() > 1e-12 {
+            return Err(DervflowError::NumericalError(
+                "Covariance matrix produced a negative variance".to_string(),
+            ));
+        }
+
+        let volatility = variance.max(0.0).sqrt();
+        let sharpe_ratio = risk_free_rate.map(|rf| {
+            if volatility > 1e-10 {
+                (expected_return - rf) / volatility
+            } else {
+                0.0
+            }
+        });
+
+        Ok(OptimizationResult::new(
+            weights,
+            expected_return,
+            volatility,
+            sharpe_ratio,
+            status,
+        ))
+    }
+
+    /// Compute the Sharpe ratio for a given set of weights and risk-free rate.
+    pub fn sharpe_ratio(&self, weights: &[f64], risk_free_rate: f64) -> Result<f64> {
+        calculate_portfolio_sharpe_ratio(
             weights,
             &self.expected_returns,
             &self.covariance,
             risk_free_rate,
-        ))
+        )
     }
 
     /// Compute percentage risk contributions for the supplied weights.
@@ -664,19 +710,27 @@ impl MeanVarianceOptimizer {
 }
 
 /// Calculate portfolio expected return
-pub fn calculate_portfolio_return(weights: &[f64], expected_returns: &[f64]) -> f64 {
-    weights
-        .iter()
-        .zip(expected_returns.iter())
-        .map(|(w, r)| w * r)
-        .sum()
+pub fn calculate_portfolio_return(weights: &[f64], expected_returns: &[f64]) -> Result<f64> {
+    let value = portfolio_return(weights, expected_returns)?;
+    if value.is_finite() {
+        Ok(value)
+    } else {
+        Err(DervflowError::NumericalError(
+            "Computed non-finite expected return".to_string(),
+        ))
+    }
 }
 
 /// Calculate portfolio volatility (standard deviation)
-pub fn calculate_portfolio_volatility(weights: &[f64], covariance: &DMatrix<f64>) -> f64 {
-    let w = DVector::from_vec(weights.to_vec());
-    let variance = w.transpose() * covariance * &w;
-    variance[(0, 0)].sqrt()
+pub fn calculate_portfolio_volatility(weights: &[f64], covariance: &DMatrix<f64>) -> Result<f64> {
+    let value = portfolio_volatility(weights, covariance)?;
+    if value.is_finite() {
+        Ok(value)
+    } else {
+        Err(DervflowError::NumericalError(
+            "Computed non-finite portfolio volatility".to_string(),
+        ))
+    }
 }
 
 /// Calculate the portfolio Sharpe ratio given weights and a risk-free rate.
@@ -685,14 +739,14 @@ pub fn calculate_portfolio_sharpe_ratio(
     expected_returns: &[f64],
     covariance: &DMatrix<f64>,
     risk_free_rate: f64,
-) -> f64 {
-    let expected_return = calculate_portfolio_return(weights, expected_returns);
-    let volatility = calculate_portfolio_volatility(weights, covariance);
+) -> Result<f64> {
+    let expected_return = calculate_portfolio_return(weights, expected_returns)?;
+    let volatility = calculate_portfolio_volatility(weights, covariance)?;
 
     if volatility > 1e-10 {
-        (expected_return - risk_free_rate) / volatility
+        Ok((expected_return - risk_free_rate) / volatility)
     } else {
-        0.0
+        Ok(0.0)
     }
 }
 
@@ -833,7 +887,7 @@ mod tests {
     fn test_portfolio_return_calculation() {
         let weights = vec![0.3, 0.4, 0.3];
         let returns = vec![0.10, 0.12, 0.08];
-        let portfolio_return = calculate_portfolio_return(&weights, &returns);
+        let portfolio_return = calculate_portfolio_return(&weights, &returns).unwrap();
         assert_relative_eq!(portfolio_return, 0.102, epsilon = 1e-6);
     }
 
@@ -845,7 +899,7 @@ mod tests {
             3,
             &[0.04, 0.01, 0.005, 0.01, 0.09, 0.01, 0.005, 0.01, 0.0225],
         );
-        let volatility = calculate_portfolio_volatility(&weights, &cov);
+        let volatility = calculate_portfolio_volatility(&weights, &cov).unwrap();
         assert!(volatility > 0.0);
         assert!(volatility < 0.3); // Reasonable range
     }
@@ -883,8 +937,8 @@ mod tests {
         let weights = vec![0.3, 0.4, 0.3];
         let summary = optimizer.portfolio_summary(&weights, Some(0.02)).unwrap();
 
-        let expected_return = calculate_portfolio_return(&weights, &returns);
-        let volatility = calculate_portfolio_volatility(&weights, &cov);
+        let expected_return = calculate_portfolio_return(&weights, &returns).unwrap();
+        let volatility = calculate_portfolio_volatility(&weights, &cov).unwrap();
 
         assert_relative_eq!(
             summary.expected_return.unwrap(),

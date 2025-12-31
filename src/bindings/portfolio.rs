@@ -96,27 +96,59 @@ impl PyPortfolioOptimizer {
             let returns_array: PyReadonlyArray2<f64> = returns.extract()?;
             let returns_2d = returns_array.as_array();
             let (n_periods, n_assets) = (returns_2d.shape()[0], returns_2d.shape()[1]);
+            if n_assets == 0 {
+                return Err(PyValueError::new_err(
+                    "Historical returns must contain at least one asset",
+                ));
+            }
+            if n_periods < 2 {
+                return Err(PyValueError::new_err(
+                    "Historical returns must contain at least two periods",
+                ));
+            }
+
+            let n_periods_f = n_periods as f64;
 
             // Calculate mean returns
             let mut exp_returns = vec![0.0; n_assets];
-            for j in 0..n_assets {
-                let mut sum = 0.0;
-                for i in 0..n_periods {
-                    sum += returns_2d[[i, j]];
+            for i in 0..n_periods {
+                for j in 0..n_assets {
+                    let value = returns_2d[[i, j]];
+                    if !value.is_finite() {
+                        return Err(PyValueError::new_err(
+                            "Historical returns contain non-finite values",
+                        ));
+                    }
+                    exp_returns[j] += value;
                 }
-                exp_returns[j] = sum / n_periods as f64;
+            }
+            for value in &mut exp_returns {
+                *value /= n_periods_f;
             }
 
-            // Calculate covariance matrix
+            // Calculate covariance matrix (symmetric, centered)
             let mut cov_matrix = DMatrix::zeros(n_assets, n_assets);
-            for i in 0..n_assets {
-                for j in 0..n_assets {
-                    let mut cov = 0.0;
-                    for k in 0..n_periods {
-                        cov += (returns_2d[[k, i]] - exp_returns[i])
-                            * (returns_2d[[k, j]] - exp_returns[j]);
+            let denom = (n_periods - 1) as f64;
+            let mut deviations = vec![0.0; n_assets];
+            for k in 0..n_periods {
+                for i in 0..n_assets {
+                    deviations[i] = returns_2d[[k, i]] - exp_returns[i];
+                }
+                for i in 0..n_assets {
+                    let di = deviations[i];
+                    for j in 0..=i {
+                        cov_matrix[(i, j)] += di * deviations[j];
                     }
-                    cov_matrix[(i, j)] = cov / (n_periods - 1) as f64;
+                }
+            }
+
+            for i in 0..n_assets {
+                for j in 0..=i {
+                    let cov = cov_matrix[(i, j)] / denom;
+                    cov_matrix[(i, j)] = cov;
+                    if i != j {
+                        cov_matrix[(j, i)] = cov;
+                    }
                 }
             }
 
@@ -289,7 +321,7 @@ impl PyPortfolioOptimizer {
     #[pyo3(signature = (weights))]
     fn portfolio_return(&self, weights: PyReadonlyArray1<f64>) -> PyResult<f64> {
         let w = weights.as_slice()?.to_vec();
-        Ok(calculate_portfolio_return(&w, &self.expected_returns))
+        calculate_portfolio_return(&w, &self.expected_returns).map_err(PyErr::from)
     }
 
     /// Calculate portfolio volatility for given weights
@@ -306,7 +338,7 @@ impl PyPortfolioOptimizer {
     #[pyo3(signature = (weights))]
     fn portfolio_volatility(&self, weights: PyReadonlyArray1<f64>) -> PyResult<f64> {
         let w = weights.as_slice()?.to_vec();
-        Ok(calculate_portfolio_volatility(&w, &self.covariance))
+        calculate_portfolio_volatility(&w, &self.covariance).map_err(PyErr::from)
     }
 
     /// Calculate the Sharpe ratio for given weights and a risk-free rate.
