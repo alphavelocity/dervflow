@@ -93,6 +93,49 @@ fn linear_quantile(data: &[f64], q: f64) -> f64 {
     sorted[lower_index] * (1.0 - weight) + sorted[upper_index] * weight
 }
 
+fn validate_drawdown_price(value: f64) -> Result<()> {
+    if !value.is_finite() {
+        return Err(DervflowError::InvalidInput(
+            "prices must contain only finite values".to_string(),
+        ));
+    }
+    if value <= 0.0 {
+        return Err(DervflowError::InvalidInput(
+            "prices must be strictly positive to compute drawdowns".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn drawdown_stats(prices: &[f64]) -> Result<(f64, f64, f64)> {
+    if prices.is_empty() {
+        return Err(DervflowError::InvalidInput(
+            "prices must contain at least one observation".to_string(),
+        ));
+    }
+
+    let first = prices[0];
+    validate_drawdown_price(first)?;
+
+    let mut running_max = first;
+    let mut max_drawdown: f64 = 0.0;
+    let mut sum_abs: f64 = 0.0;
+    let mut sum_sq: f64 = 0.0;
+
+    for price in prices.iter().skip(1) {
+        validate_drawdown_price(*price)?;
+        if *price > running_max {
+            running_max = *price;
+        }
+        let drawdown = price / running_max - 1.0;
+        max_drawdown = max_drawdown.min(drawdown);
+        sum_abs += drawdown.abs();
+        sum_sq += drawdown * drawdown;
+    }
+
+    Ok((max_drawdown, sum_abs, sum_sq))
+}
+
 /// Compound periodic returns to an annualised rate (CAGR).
 pub fn annualize_returns(returns: &[f64], periods_per_year: usize) -> Result<f64> {
     ensure_non_empty("returns", returns)?;
@@ -628,18 +671,25 @@ pub fn downside_capture_ratio(
 
 /// Compute the running drawdown series for a price path.
 pub fn drawdown_series(prices: &[f64]) -> Result<Vec<f64>> {
-    ensure_non_empty("prices", prices)?;
-    if prices.iter().any(|price| *price <= 0.0) {
+    if prices.is_empty() {
         return Err(DervflowError::InvalidInput(
-            "prices must be strictly positive to compute drawdowns".to_string(),
+            "prices must contain at least one observation".to_string(),
         ));
     }
 
-    let mut running_max = f64::NEG_INFINITY;
+    let first = prices[0];
+    validate_drawdown_price(first)?;
+
+    let mut running_max = first;
     let mut drawdowns = Vec::with_capacity(prices.len());
 
-    for price in prices {
-        running_max = running_max.max(*price);
+    drawdowns.push(0.0);
+
+    for price in prices.iter().skip(1) {
+        validate_drawdown_price(*price)?;
+        if *price > running_max {
+            running_max = *price;
+        }
         drawdowns.push(price / running_max - 1.0);
     }
 
@@ -648,23 +698,20 @@ pub fn drawdown_series(prices: &[f64]) -> Result<Vec<f64>> {
 
 /// Compute the maximum drawdown of a price series.
 pub fn max_drawdown(prices: &[f64]) -> Result<f64> {
-    let drawdowns = drawdown_series(prices)?;
-    Ok(drawdowns.into_iter().fold(0.0, |acc, value| acc.min(value)))
+    let (max_drawdown, _, _) = drawdown_stats(prices)?;
+    Ok(max_drawdown)
 }
 
 /// Compute the pain index – the mean magnitude of drawdowns.
 pub fn pain_index(prices: &[f64]) -> Result<f64> {
-    let drawdowns = drawdown_series(prices)?;
-    let total = drawdowns.iter().map(|value| value.abs()).sum::<f64>();
-    Ok(total / drawdowns.len() as f64)
+    let (_, sum_abs, _) = drawdown_stats(prices)?;
+    Ok(sum_abs / prices.len() as f64)
 }
 
 /// Compute the ulcer index – the root mean square of drawdowns.
 pub fn ulcer_index(prices: &[f64]) -> Result<f64> {
-    let drawdowns = drawdown_series(prices)?;
-    let mean_square =
-        drawdowns.iter().map(|value| value.powi(2)).sum::<f64>() / drawdowns.len() as f64;
-    Ok(mean_square.sqrt())
+    let (_, _, sum_sq) = drawdown_stats(prices)?;
+    Ok((sum_sq / prices.len() as f64).sqrt())
 }
 
 /// Compute the Calmar ratio given an annual return and maximum drawdown.
