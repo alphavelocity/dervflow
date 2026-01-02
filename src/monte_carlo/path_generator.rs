@@ -104,13 +104,11 @@ impl PathGenerator {
         // Simulate each path
         for i in 0..params.num_paths {
             let mut x = params.initial_value;
-            let mut t = 0.0;
-
             for j in 1..=params.num_steps {
+                let t = (j - 1) as f64 * params.dt;
                 let dw = self.rng.standard_normal();
                 x = process.simulate_step(t, x, params.dt, dw);
                 paths[[i, j]] = x;
-                t += params.dt;
             }
         }
 
@@ -129,13 +127,11 @@ impl PathGenerator {
         path[0] = params.initial_value;
 
         let mut x = params.initial_value;
-        let mut t = 0.0;
-
         for j in 1..=params.num_steps {
+            let t = (j - 1) as f64 * params.dt;
             let dw = self.rng.standard_normal();
             x = process.simulate_step(t, x, params.dt, dw);
             path[j] = x;
-            t += params.dt;
         }
 
         path
@@ -161,9 +157,8 @@ impl PathGenerator {
         for i in 0..params.num_paths {
             let mut x_pos = params.initial_value;
             let mut x_neg = params.initial_value;
-            let mut t = 0.0;
-
             for j in 1..=params.num_steps {
+                let t = (j - 1) as f64 * params.dt;
                 let dw = self.rng.standard_normal();
 
                 // Positive path
@@ -173,8 +168,6 @@ impl PathGenerator {
                 // Antithetic path
                 x_neg = process.simulate_step(t, x_neg, params.dt, -dw);
                 paths[[2 * i + 1, j]] = x_neg;
-
-                t += params.dt;
             }
         }
 
@@ -191,43 +184,26 @@ impl PathGenerator {
         params: &SimulationParams,
         base_seed: u64,
     ) -> Array2<f64> {
-        // Pre-allocate the output array
-        let mut paths = Array2::zeros((params.num_paths, params.num_steps + 1));
+        let row_len = params.num_steps + 1;
+        let mut paths = Array2::zeros((params.num_paths, row_len));
 
-        // Set initial values
-        for i in 0..params.num_paths {
-            paths[[i, 0]] = params.initial_value;
-        }
+        let data = paths
+            .as_slice_mut()
+            .expect("paths array should be contiguous");
 
-        // Generate paths in parallel
-        // Each path gets its own RNG with a unique seed
-        let path_data: Vec<Vec<f64>> = (0..params.num_paths)
-            .into_par_iter()
-            .map(|path_idx| {
-                // Create thread-local RNG with unique seed
+        data.par_chunks_mut(row_len)
+            .enumerate()
+            .for_each(|(path_idx, row)| {
                 let mut local_rng = RandomGenerator::new(base_seed.wrapping_add(path_idx as u64));
-
-                let mut path = vec![params.initial_value];
                 let mut x = params.initial_value;
-                let mut t = 0.0;
-
-                for _ in 1..=params.num_steps {
+                row[0] = params.initial_value;
+                for (step_idx, value) in row.iter_mut().skip(1).enumerate() {
+                    let t = step_idx as f64 * params.dt;
                     let dw = local_rng.standard_normal();
                     x = process.simulate_step(t, x, params.dt, dw);
-                    path.push(x);
-                    t += params.dt;
+                    *value = x;
                 }
-
-                path
-            })
-            .collect();
-
-        // Copy results into output array
-        for (i, path) in path_data.iter().enumerate() {
-            for (j, &value) in path.iter().enumerate() {
-                paths[[i, j]] = value;
-            }
-        }
+            });
 
         paths
     }
@@ -242,54 +218,37 @@ impl PathGenerator {
         params: &SimulationParams,
         base_seed: u64,
     ) -> Array2<f64> {
-        // Pre-allocate the output array
-        let mut paths = Array2::zeros((2 * params.num_paths, params.num_steps + 1));
+        let row_len = params.num_steps + 1;
+        let mut paths = Array2::zeros((2 * params.num_paths, row_len));
 
-        // Set initial values
-        for i in 0..(2 * params.num_paths) {
-            paths[[i, 0]] = params.initial_value;
-        }
+        let data = paths
+            .as_slice_mut()
+            .expect("paths array should be contiguous");
 
-        // Generate pairs of antithetic paths in parallel
-        let path_pairs: Vec<(Vec<f64>, Vec<f64>)> = (0..params.num_paths)
-            .into_par_iter()
-            .map(|path_idx| {
-                // Create thread-local RNG with unique seed
+        data.par_chunks_mut(2 * row_len)
+            .enumerate()
+            .for_each(|(path_idx, rows)| {
+                let (row_pos, row_neg) = rows.split_at_mut(row_len);
                 let mut local_rng = RandomGenerator::new(base_seed.wrapping_add(path_idx as u64));
-
-                let mut path_pos = vec![params.initial_value];
-                let mut path_neg = vec![params.initial_value];
                 let mut x_pos = params.initial_value;
                 let mut x_neg = params.initial_value;
-                let mut t = 0.0;
+                row_pos[0] = params.initial_value;
+                row_neg[0] = params.initial_value;
 
-                for _ in 1..=params.num_steps {
+                for (step_idx, (value_pos, value_neg)) in row_pos
+                    .iter_mut()
+                    .skip(1)
+                    .zip(row_neg.iter_mut().skip(1))
+                    .enumerate()
+                {
+                    let t = step_idx as f64 * params.dt;
                     let dw = local_rng.standard_normal();
-
-                    // Positive path
                     x_pos = process.simulate_step(t, x_pos, params.dt, dw);
-                    path_pos.push(x_pos);
-
-                    // Antithetic path
                     x_neg = process.simulate_step(t, x_neg, params.dt, -dw);
-                    path_neg.push(x_neg);
-
-                    t += params.dt;
+                    *value_pos = x_pos;
+                    *value_neg = x_neg;
                 }
-
-                (path_pos, path_neg)
-            })
-            .collect();
-
-        // Copy results into output array
-        for (i, (path_pos, path_neg)) in path_pairs.iter().enumerate() {
-            for (j, &value) in path_pos.iter().enumerate() {
-                paths[[2 * i, j]] = value;
-            }
-            for (j, &value) in path_neg.iter().enumerate() {
-                paths[[2 * i + 1, j]] = value;
-            }
-        }
+            });
 
         paths
     }
