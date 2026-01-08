@@ -63,33 +63,12 @@ impl VaRResult {
 /// # Returns
 /// VaR value (positive number representing potential loss at the given confidence level)
 pub fn historical_var(returns: &[f64], confidence_level: f64) -> Result<f64> {
-    if returns.is_empty() {
-        return Err(DervflowError::InvalidInput(
-            "Returns array cannot be empty".to_string(),
-        ));
-    }
-
-    if confidence_level <= 0.0 || confidence_level >= 1.0 {
-        return Err(DervflowError::InvalidInput(format!(
-            "Confidence level must be between 0 and 1, got {}",
-            confidence_level
-        )));
-    }
-
-    // Sort returns in ascending order (worst losses first)
-    let mut sorted_returns = returns.to_vec();
-    sorted_returns.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-
-    // Calculate the index for the confidence level
-    // For 95% confidence, we want the 5th percentile (worst 5% of outcomes)
-    let alpha = 1.0 - confidence_level;
-    let index = (alpha * sorted_returns.len() as f64).ceil() as usize;
-    let index = index.min(sorted_returns.len()).saturating_sub(1);
+    let (values, _tail_count, target_index) = prepare_historical_tail(returns, confidence_level)?;
 
     // VaR is the negative of the return at this percentile (to express as a positive loss)
-    let var = -sorted_returns[index];
+    let var = -values[target_index];
 
-    Ok(var)
+    Ok(var.max(0.0))
 }
 
 /// Calculate Conditional Value at Risk (CVaR/Expected Shortfall) using historical simulation
@@ -103,37 +82,15 @@ pub fn historical_var(returns: &[f64], confidence_level: f64) -> Result<f64> {
 /// # Returns
 /// CVaR value (positive number representing expected loss in the tail beyond VaR)
 pub fn historical_cvar(returns: &[f64], confidence_level: f64) -> Result<f64> {
-    if returns.is_empty() {
-        return Err(DervflowError::InvalidInput(
-            "Returns array cannot be empty".to_string(),
-        ));
-    }
-
-    if confidence_level <= 0.0 || confidence_level >= 1.0 {
-        return Err(DervflowError::InvalidInput(format!(
-            "Confidence level must be between 0 and 1, got {}",
-            confidence_level
-        )));
-    }
-
-    // Sort returns in ascending order (worst losses first)
-    let mut sorted_returns = returns.to_vec();
-    sorted_returns.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-
-    // Calculate the index for the confidence level
-    let alpha = 1.0 - confidence_level;
-    let index = (alpha * sorted_returns.len() as f64).ceil() as usize;
-    let index = index.min(sorted_returns.len());
+    let (values, tail_count, target_index) = prepare_historical_tail(returns, confidence_level)?;
 
     // CVaR is the average of all returns worse than VaR
-    if index == 0 {
-        return Ok(-sorted_returns[0]);
-    }
+    let tail_sum: f64 = values[..tail_count].iter().sum();
+    let cvar = -tail_sum / tail_count as f64;
+    let var = -values[target_index];
 
-    let tail_sum: f64 = sorted_returns[..index].iter().sum();
-    let cvar = -tail_sum / index as f64;
-
-    Ok(cvar)
+    let var_clamped = var.max(0.0);
+    Ok(cvar.max(var_clamped).max(0.0))
 }
 
 /// Calculate Value at Risk using parametric variance-covariance method
@@ -401,6 +358,42 @@ fn validate_confidence_level(confidence_level: f64) -> Result<()> {
         )));
     }
     Ok(())
+}
+
+fn validate_historical_inputs(returns: &[f64], confidence_level: f64) -> Result<()> {
+    if returns.is_empty() {
+        return Err(DervflowError::InvalidInput(
+            "Returns array cannot be empty".to_string(),
+        ));
+    }
+
+    if !returns.iter().all(|value| value.is_finite()) {
+        return Err(DervflowError::InvalidInput(
+            "Returns must contain only finite values".to_string(),
+        ));
+    }
+
+    validate_confidence_level(confidence_level)
+}
+
+fn historical_tail_count(length: usize, confidence_level: f64) -> usize {
+    let alpha = 1.0 - confidence_level;
+    let tail_count = (alpha * length as f64).ceil() as usize;
+    tail_count.max(1).min(length)
+}
+
+fn prepare_historical_tail(
+    returns: &[f64],
+    confidence_level: f64,
+) -> Result<(Vec<f64>, usize, usize)> {
+    validate_historical_inputs(returns, confidence_level)?;
+    let tail_count = historical_tail_count(returns.len(), confidence_level);
+    let target_index = tail_count.saturating_sub(1);
+
+    let mut values = returns.to_vec();
+    values.select_nth_unstable_by(target_index, |a, b| a.total_cmp(b));
+
+    Ok((values, tail_count, target_index))
 }
 
 fn mean_std_dev(returns: &[f64]) -> Result<(f64, f64)> {
@@ -695,14 +688,19 @@ mod tests {
     #[test]
     fn test_var_invalid_inputs() {
         let returns = vec![0.01, -0.01, 0.02];
+        let returns_with_nan = vec![0.01, f64::NAN, -0.02];
+        let returns_with_inf = vec![0.01, f64::INFINITY, -0.02];
 
         // Empty returns
         assert!(historical_var(&[], 0.95).is_err());
+        assert!(historical_cvar(&[], 0.95).is_err());
 
         // Invalid confidence level
         assert!(historical_var(&returns, 0.0).is_err());
         assert!(historical_var(&returns, 1.0).is_err());
         assert!(historical_var(&returns, 1.5).is_err());
+        assert!(historical_cvar(&returns, 0.0).is_err());
+        assert!(historical_cvar(&returns, 1.0).is_err());
 
         // Parametric methods require at least two observations
         assert!(parametric_var(&[0.01], 0.95).is_err());
@@ -710,6 +708,21 @@ mod tests {
 
         // Cornish-Fisher requires enough observations for higher moments
         assert!(cornish_fisher_var(&[0.01, -0.01, 0.02], 0.95).is_err());
+
+        // Historical methods reject non-finite values
+        assert!(historical_var(&returns_with_nan, 0.95).is_err());
+        assert!(historical_cvar(&returns_with_nan, 0.95).is_err());
+        assert!(historical_var(&returns_with_inf, 0.95).is_err());
+        assert!(historical_cvar(&returns_with_inf, 0.95).is_err());
+    }
+
+    #[test]
+    fn test_historical_var_cvar_non_negative_for_positive_returns() {
+        let returns = vec![0.01, 0.02, 0.03, 0.015, 0.025];
+        let var = historical_var(&returns, 0.95).unwrap();
+        let cvar = historical_cvar(&returns, 0.95).unwrap();
+        assert!(var >= 0.0);
+        assert!(cvar >= var);
     }
 
     #[test]
