@@ -16,6 +16,100 @@ use crate::core::stat::{
     root_mean_square as core_root_mean_square,
 };
 
+fn ensure_finite(name: &str, data: &[f64]) -> Result<()> {
+    if let Some(value) = data.iter().find(|value| !value.is_finite()) {
+        return Err(DervflowError::InvalidInput(format!(
+            "{name} must contain only finite values, found {value}"
+        )));
+    }
+    Ok(())
+}
+
+fn mean_unchecked(data: &[f64]) -> f64 {
+    data.iter().sum::<f64>() / data.len() as f64
+}
+
+fn variance_unchecked(data: &[f64], ddof: usize) -> f64 {
+    let mean_value = mean_unchecked(data);
+    let sum_sq_diff: f64 = data.iter().map(|&x| (x - mean_value).powi(2)).sum();
+    sum_sq_diff / (data.len() - ddof) as f64
+}
+
+fn skewness_unchecked(data: &[f64]) -> f64 {
+    let mean_value = mean_unchecked(data);
+    let n = data.len() as f64;
+    let std = variance_unchecked(data, 1).sqrt();
+
+    if std == 0.0 {
+        return 0.0;
+    }
+
+    let sum_cubed: f64 = data.iter().map(|&x| ((x - mean_value) / std).powi(3)).sum();
+
+    // Sample skewness with bias correction.
+    (n / ((n - 1.0) * (n - 2.0))) * sum_cubed
+}
+
+fn kurtosis_unchecked(data: &[f64]) -> f64 {
+    let mean_value = mean_unchecked(data);
+    let n = data.len() as f64;
+    let std = variance_unchecked(data, 1).sqrt();
+
+    if std == 0.0 {
+        return 0.0;
+    }
+
+    let sum_fourth: f64 = data.iter().map(|&x| ((x - mean_value) / std).powi(4)).sum();
+
+    // Sample kurtosis with bias correction (excess kurtosis).
+    ((n * (n + 1.0)) / ((n - 1.0) * (n - 2.0) * (n - 3.0))) * sum_fourth
+        - (3.0 * (n - 1.0).powi(2)) / ((n - 2.0) * (n - 3.0))
+}
+
+fn quantiles_unchecked(data: &[f64], qs: &[f64]) -> Result<Vec<f64>> {
+    let mut sorted = data.to_vec();
+    sorted.sort_by(|a, b| a.total_cmp(b));
+
+    let mut results = Vec::with_capacity(qs.len());
+    let n = sorted.len();
+
+    for &q in qs {
+        if !(0.0..=1.0).contains(&q) {
+            return Err(DervflowError::InvalidInput(format!(
+                "Quantile must be between 0 and 1, got {}",
+                q
+            )));
+        }
+
+        let index = q * (n - 1) as f64;
+        let lower = index.floor() as usize;
+        let upper = index.ceil() as usize;
+        let fraction = index - lower as f64;
+
+        let value = if lower == upper {
+            sorted[lower]
+        } else {
+            sorted[lower] * (1.0 - fraction) + sorted[upper] * fraction
+        };
+
+        results.push(value);
+    }
+
+    Ok(results)
+}
+
+fn ewma_unchecked(data: &[f64], alpha: f64) -> Vec<f64> {
+    let mut result = Vec::with_capacity(data.len());
+    result.push(data[0]);
+
+    for i in 1..data.len() {
+        let ema = alpha * data[i] + (1.0 - alpha) * result[i - 1];
+        result.push(ema);
+    }
+
+    result
+}
+
 /// Statistical moments and measures for a time series
 #[derive(Debug, Clone, Copy)]
 pub struct TimeSeriesStats {
@@ -64,9 +158,9 @@ pub fn mean(data: &[f64]) -> Result<f64> {
             "Cannot calculate mean of empty data".to_string(),
         ));
     }
+    ensure_finite("mean", data)?;
 
-    let sum: f64 = data.iter().sum();
-    Ok(sum / data.len() as f64)
+    Ok(mean_unchecked(data))
 }
 
 /// Calculate variance of a data series
@@ -83,10 +177,9 @@ pub fn variance(data: &[f64], ddof: usize) -> Result<f64> {
             ddof
         )));
     }
+    ensure_finite("variance", data)?;
 
-    let m = mean(data)?;
-    let sum_sq_diff: f64 = data.iter().map(|&x| (x - m).powi(2)).sum();
-    Ok(sum_sq_diff / (data.len() - ddof) as f64)
+    Ok(variance_unchecked(data, ddof))
 }
 
 /// Calculate standard deviation of a data series
@@ -104,21 +197,9 @@ pub fn skewness(data: &[f64]) -> Result<f64> {
             "Need at least 3 data points to calculate skewness".to_string(),
         ));
     }
+    ensure_finite("skewness", data)?;
 
-    let m = mean(data)?;
-    let n = data.len() as f64;
-    let std = std_dev(data, 1)?;
-
-    if std == 0.0 {
-        return Ok(0.0);
-    }
-
-    let sum_cubed: f64 = data.iter().map(|&x| ((x - m) / std).powi(3)).sum();
-
-    // Sample skewness with bias correction
-    let skew = (n / ((n - 1.0) * (n - 2.0))) * sum_cubed;
-
-    Ok(skew)
+    Ok(skewness_unchecked(data))
 }
 
 /// Calculate kurtosis of a data series
@@ -131,22 +212,9 @@ pub fn kurtosis(data: &[f64]) -> Result<f64> {
             "Need at least 4 data points to calculate kurtosis".to_string(),
         ));
     }
+    ensure_finite("kurtosis", data)?;
 
-    let m = mean(data)?;
-    let n = data.len() as f64;
-    let std = std_dev(data, 1)?;
-
-    if std == 0.0 {
-        return Ok(0.0);
-    }
-
-    let sum_fourth: f64 = data.iter().map(|&x| ((x - m) / std).powi(4)).sum();
-
-    // Sample kurtosis with bias correction (excess kurtosis)
-    let kurt = ((n * (n + 1.0)) / ((n - 1.0) * (n - 2.0) * (n - 3.0))) * sum_fourth
-        - (3.0 * (n - 1.0).powi(2)) / ((n - 2.0) * (n - 3.0));
-
-    Ok(kurt)
+    Ok(kurtosis_unchecked(data))
 }
 
 /// Calculate all statistical moments at once
@@ -156,14 +224,15 @@ pub fn calculate_stat(data: &[f64]) -> Result<TimeSeriesStats> {
             "Need at least 4 data points to calculate all stat metrics".to_string(),
         ));
     }
+    ensure_finite("calculate_stat", data)?;
 
     let count = data.len();
     let sum: f64 = data.iter().sum();
-    let mean_value = sum / count as f64;
-    let variance_value = variance(data, 1)?;
+    let mean_value = mean_unchecked(data);
+    let variance_value = variance_unchecked(data, 1);
     let std_dev = variance_value.sqrt();
-    let skew = skewness(data)?;
-    let kurt = kurtosis(data)?;
+    let skew = skewness_unchecked(data);
+    let kurt = kurtosis_unchecked(data);
 
     // Compute extrema and range in a single pass.
     let mut min_value = f64::INFINITY;
@@ -179,10 +248,11 @@ pub fn calculate_stat(data: &[f64]) -> Result<TimeSeriesStats> {
 
     let range = max_value - min_value;
 
-    // Quantile-based metrics reuse the existing quantile helper.
-    let median = quantile(data, 0.5)?;
-    let q1 = quantile(data, 0.25)?;
-    let q3 = quantile(data, 0.75)?;
+    // Quantile-based metrics reuse a single sort pass.
+    let quartiles = quantiles_unchecked(data, &[0.25, 0.5, 0.75])?;
+    let q1 = quartiles[0];
+    let median = quartiles[1];
+    let q3 = quartiles[2];
     let iqr = q3 - q1;
 
     // Dispersion metrics derived from absolute deviations.
@@ -230,6 +300,7 @@ pub fn quantile(data: &[f64], q: f64) -> Result<f64> {
             "Cannot calculate quantile of empty data".to_string(),
         ));
     }
+    ensure_finite("quantile", data)?;
 
     if !(0.0..=1.0).contains(&q) {
         return Err(DervflowError::InvalidInput(format!(
@@ -238,20 +309,10 @@ pub fn quantile(data: &[f64], q: f64) -> Result<f64> {
         )));
     }
 
-    let mut sorted = data.to_vec();
-    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-
-    let n = sorted.len();
-    let index = q * (n - 1) as f64;
-    let lower = index.floor() as usize;
-    let upper = index.ceil() as usize;
-    let fraction = index - lower as f64;
-
-    if lower == upper {
-        Ok(sorted[lower])
-    } else {
-        Ok(sorted[lower] * (1.0 - fraction) + sorted[upper] * fraction)
-    }
+    Ok(quantiles_unchecked(data, &[q])?
+        .into_iter()
+        .next()
+        .expect("quantiles_unchecked should return one value"))
 }
 
 /// Calculate multiple quantiles at once
@@ -261,36 +322,9 @@ pub fn quantiles(data: &[f64], qs: &[f64]) -> Result<Vec<f64>> {
             "Cannot calculate quantiles of empty data".to_string(),
         ));
     }
+    ensure_finite("quantiles", data)?;
 
-    let mut sorted = data.to_vec();
-    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-
-    let mut results = Vec::with_capacity(qs.len());
-    let n = sorted.len();
-
-    for &q in qs {
-        if !(0.0..=1.0).contains(&q) {
-            return Err(DervflowError::InvalidInput(format!(
-                "Quantile must be between 0 and 1, got {}",
-                q
-            )));
-        }
-
-        let index = q * (n - 1) as f64;
-        let lower = index.floor() as usize;
-        let upper = index.ceil() as usize;
-        let fraction = index - lower as f64;
-
-        let value = if lower == upper {
-            sorted[lower]
-        } else {
-            sorted[lower] * (1.0 - fraction) + sorted[upper] * fraction
-        };
-
-        results.push(value);
-    }
-
-    Ok(results)
+    quantiles_unchecked(data, qs)
 }
 
 /// Calculate rolling mean over a window
@@ -308,6 +342,7 @@ pub fn rolling_mean(data: &[f64], window: usize) -> Result<Vec<f64>> {
             window
         )));
     }
+    ensure_finite("rolling_mean", data)?;
 
     let mut result = Vec::with_capacity(data.len() - window + 1);
 
@@ -339,13 +374,35 @@ pub fn rolling_std(data: &[f64], window: usize) -> Result<Vec<f64>> {
             window
         )));
     }
+    ensure_finite("rolling_std", data)?;
 
     let mut result = Vec::with_capacity(data.len() - window + 1);
+    let mut sum = 0.0;
+    let mut sum_sq = 0.0;
+    let window_f = window as f64;
+    let denom = (window - 1) as f64;
 
-    for i in 0..=(data.len() - window) {
-        let window_data = &data[i..i + window];
-        let std = std_dev(window_data, 1)?;
-        result.push(std);
+    for &value in &data[..window] {
+        sum += value;
+        sum_sq += value * value;
+    }
+
+    let mut variance = (sum_sq - (sum * sum) / window_f) / denom;
+    if variance < 0.0 {
+        variance = 0.0;
+    }
+    result.push(variance.sqrt());
+
+    for i in window..data.len() {
+        let outgoing = data[i - window];
+        let incoming = data[i];
+        sum += incoming - outgoing;
+        sum_sq += incoming * incoming - outgoing * outgoing;
+        let mut variance = (sum_sq - (sum * sum) / window_f) / denom;
+        if variance < 0.0 {
+            variance = 0.0;
+        }
+        result.push(variance.sqrt());
     }
 
     Ok(result)
@@ -363,6 +420,7 @@ pub fn ewma(data: &[f64], alpha: f64) -> Result<Vec<f64>> {
             "Cannot calculate EWMA of empty data".to_string(),
         ));
     }
+    ensure_finite("ewma", data)?;
 
     if !(0.0 < alpha && alpha <= 1.0) {
         return Err(DervflowError::InvalidInput(format!(
@@ -371,15 +429,7 @@ pub fn ewma(data: &[f64], alpha: f64) -> Result<Vec<f64>> {
         )));
     }
 
-    let mut result = Vec::with_capacity(data.len());
-    result.push(data[0]);
-
-    for i in 1..data.len() {
-        let ema = alpha * data[i] + (1.0 - alpha) * result[i - 1];
-        result.push(ema);
-    }
-
-    Ok(result)
+    Ok(ewma_unchecked(data, alpha))
 }
 
 /// Calculate exponentially weighted moving standard deviation
@@ -394,6 +444,7 @@ pub fn ewm_std(data: &[f64], alpha: f64) -> Result<Vec<f64>> {
             "Cannot calculate EWM std of empty data".to_string(),
         ));
     }
+    ensure_finite("ewm_std", data)?;
 
     if !(0.0 < alpha && alpha <= 1.0) {
         return Err(DervflowError::InvalidInput(format!(
@@ -402,7 +453,7 @@ pub fn ewm_std(data: &[f64], alpha: f64) -> Result<Vec<f64>> {
         )));
     }
 
-    let ema = ewma(data, alpha)?;
+    let ema = ewma_unchecked(data, alpha);
     let mut result = Vec::with_capacity(data.len());
 
     // First value: use zero variance
