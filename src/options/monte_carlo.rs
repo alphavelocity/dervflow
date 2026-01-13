@@ -329,7 +329,7 @@ pub fn price_european_monte_carlo_parallel(
                 );
                 let payoff_anti =
                     calculate_payoff(terminal_price_anti, params.strike, params.option_type);
-                
+
                 stats.update(payoff);
                 stats.update(payoff_anti);
                 stats
