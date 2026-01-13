@@ -57,28 +57,80 @@ fn calculate_payoff(terminal_price: f64, strike: f64, option_type: OptionType) -
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+struct RunningStats {
+    count: u64,
+    mean: f64,
+    m2: f64,
+}
+
+impl RunningStats {
+    fn new() -> Self {
+        Self {
+            count: 0,
+            mean: 0.0,
+            m2: 0.0,
+        }
+    }
+
+    fn update(&mut self, value: f64) {
+        self.count += 1;
+        let count = self.count as f64;
+        let delta = value - self.mean;
+        self.mean += delta / count;
+        let delta2 = value - self.mean;
+        self.m2 += delta * delta2;
+    }
+
+    fn merge(self, other: Self) -> Self {
+        if self.count == 0 {
+            return other;
+        }
+        if other.count == 0 {
+            return self;
+        }
+
+        let total_count = self.count + other.count;
+        let total_count_f64 = total_count as f64;
+        let self_count_f64 = self.count as f64;
+        let other_count_f64 = other.count as f64;
+        let delta = other.mean - self.mean;
+        let mean = self.mean + delta * (other_count_f64 / total_count_f64);
+        let m2 = self.m2
+            + other.m2
+            + delta * delta * (self_count_f64 * other_count_f64 / total_count_f64);
+
+        Self {
+            count: total_count,
+            mean,
+            m2,
+        }
+    }
+
+    fn finalize(self) -> (f64, f64) {
+        if self.count == 0 {
+            return (0.0, 0.0);
+        }
+
+        let count = self.count as f64;
+        let variance = if self.count > 1 {
+            self.m2 / (count - 1.0)
+        } else {
+            0.0
+        };
+        let standard_error = (variance / count).sqrt();
+
+        (self.mean, standard_error)
+    }
+}
+
 fn mean_and_standard_error(values: &[f64]) -> (f64, f64) {
-    let n = values.len() as f64;
-    if n == 0.0 {
-        return (0.0, 0.0);
-    }
-
-    let mut mean = 0.0;
-    let mut m2 = 0.0;
-    let mut count = 0.0;
-
+    let mut stats = RunningStats::new();
     for &value in values {
-        count += 1.0;
-        let delta = value - mean;
-        mean += delta / count;
-        let delta2 = value - mean;
-        m2 += delta * delta2;
+        stats.update(value);
     }
 
-    let variance = if count > 1.0 { m2 / (count - 1.0) } else { 0.0 };
-    let standard_error = (variance / count).sqrt();
-
-    (mean, standard_error)
+    stats.finalize()
 }
 
 /// Price European option using Monte Carlo simulation
@@ -135,8 +187,8 @@ pub fn price_european_monte_carlo(
         None => RandomGenerator::from_entropy(),
     };
 
-    // Simulate paths and calculate payoffs
-    let mut payoffs = Vec::with_capacity(num_paths);
+    // Simulate paths and calculate running statistics
+    let mut stats = RunningStats::new();
     if use_antithetic {
         let num_pairs = num_paths / 2;
         let has_extra = num_paths % 2 == 1;
@@ -153,7 +205,7 @@ pub fn price_european_monte_carlo(
                 z,
             );
             let payoff = calculate_payoff(terminal_price, params.strike, params.option_type);
-            payoffs.push(payoff);
+            stats.update(payoff);
 
             let terminal_price_anti = simulate_gbm_terminal(
                 params.spot,
@@ -165,7 +217,7 @@ pub fn price_european_monte_carlo(
             );
             let payoff_anti =
                 calculate_payoff(terminal_price_anti, params.strike, params.option_type);
-            payoffs.push(payoff_anti);
+            stats.update(payoff_anti);
         }
 
         if has_extra {
@@ -179,7 +231,7 @@ pub fn price_european_monte_carlo(
                 z,
             );
             let payoff = calculate_payoff(terminal_price, params.strike, params.option_type);
-            payoffs.push(payoff);
+            stats.update(payoff);
         }
     } else {
         for _ in 0..num_paths {
@@ -193,12 +245,12 @@ pub fn price_european_monte_carlo(
                 z,
             );
             let payoff = calculate_payoff(terminal_price, params.strike, params.option_type);
-            payoffs.push(payoff);
+            stats.update(payoff);
         }
     }
 
     // Calculate mean and standard error
-    let (mean_payoff, standard_error) = mean_and_standard_error(&payoffs);
+    let (mean_payoff, standard_error) = stats.finalize();
 
     // Discount to present value
     let discount_factor = (-params.rate * params.time_to_maturity).exp();
@@ -248,11 +300,11 @@ pub fn price_european_monte_carlo_parallel(
 
     // Simulate paths in parallel
     let base_seed = seed.unwrap_or(0);
-    let mut payoffs: Vec<f64> = if use_antithetic {
+    let mut stats = if use_antithetic {
         let num_pairs = num_paths / 2;
         (0..num_pairs)
             .into_par_iter()
-            .flat_map(|i| {
+            .fold(RunningStats::new, |mut stats, i| {
                 let thread_seed = base_seed.wrapping_add(i as u64);
                 let mut rng = RandomGenerator::new(thread_seed);
 
@@ -277,13 +329,16 @@ pub fn price_european_monte_carlo_parallel(
                 );
                 let payoff_anti =
                     calculate_payoff(terminal_price_anti, params.strike, params.option_type);
-                vec![payoff, payoff_anti]
+                
+                stats.update(payoff);
+                stats.update(payoff_anti);
+                stats
             })
-            .collect()
+            .reduce(RunningStats::new, |left, right| left.merge(right))
     } else {
         (0..num_paths)
             .into_par_iter()
-            .map(|i| {
+            .fold(RunningStats::new, |mut stats, i| {
                 let thread_seed = base_seed.wrapping_add(i as u64);
                 let mut rng = RandomGenerator::new(thread_seed);
 
@@ -296,9 +351,11 @@ pub fn price_european_monte_carlo_parallel(
                     params.time_to_maturity,
                     z,
                 );
-                calculate_payoff(terminal_price, params.strike, params.option_type)
+                let payoff = calculate_payoff(terminal_price, params.strike, params.option_type);
+                stats.update(payoff);
+                stats
             })
-            .collect()
+            .reduce(RunningStats::new, |left, right| left.merge(right))
     };
 
     if use_antithetic && num_paths % 2 == 1 {
@@ -313,7 +370,7 @@ pub fn price_european_monte_carlo_parallel(
             params.time_to_maturity,
             z,
         );
-        payoffs.push(calculate_payoff(
+        stats.update(calculate_payoff(
             terminal_price,
             params.strike,
             params.option_type,
@@ -321,7 +378,7 @@ pub fn price_european_monte_carlo_parallel(
     }
 
     // Calculate mean and standard error
-    let (mean_payoff, standard_error) = mean_and_standard_error(&payoffs);
+    let (mean_payoff, standard_error) = stats.finalize();
 
     // Discount to present value
     let discount_factor = (-params.rate * params.time_to_maturity).exp();
