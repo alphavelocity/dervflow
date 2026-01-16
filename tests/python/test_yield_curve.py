@@ -18,7 +18,13 @@ Tests cover:
 import numpy as np
 import pytest
 
-from dervflow import BondAnalytics, MultiCurve, SwapPeriod, YieldCurve, YieldCurveBuilder
+from dervflow import (
+    BondAnalytics,
+    MultiCurve,
+    SwapPeriod,
+    YieldCurve,
+    YieldCurveBuilder,
+)
 
 
 class TestYieldCurveConstruction:

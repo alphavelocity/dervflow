@@ -29,41 +29,107 @@ fn mean_unchecked(data: &[f64]) -> f64 {
     data.iter().sum::<f64>() / data.len() as f64
 }
 
+#[derive(Debug, Clone, Copy)]
+struct Moments {
+    count: usize,
+    mean: f64,
+    m2: f64,
+    m3: f64,
+    m4: f64,
+}
+
+impl Moments {
+    fn new() -> Self {
+        Self {
+            count: 0,
+            mean: 0.0,
+            m2: 0.0,
+            m3: 0.0,
+            m4: 0.0,
+        }
+    }
+
+    fn update(&mut self, value: f64) {
+        let count_prev = self.count as f64;
+        self.count += 1;
+        let count = self.count as f64;
+
+        let delta = value - self.mean;
+        let delta_n = delta / count;
+        let delta_n2 = delta_n * delta_n;
+        let term1 = delta * delta_n * count_prev;
+
+        self.m4 += term1 * delta_n2 * (count * count - 3.0 * count + 3.0)
+            + 6.0 * delta_n2 * self.m2
+            - 4.0 * delta_n * self.m3;
+        self.m3 += term1 * delta_n * (count - 2.0) - 3.0 * delta_n * self.m2;
+        self.m2 += term1;
+        self.mean += delta_n;
+    }
+
+    fn variance(&self, ddof: usize) -> f64 {
+        let variance = self.m2 / (self.count - ddof) as f64;
+        if variance < 0.0 { 0.0 } else { variance }
+    }
+
+    fn sample_std(&self) -> f64 {
+        self.variance(1).sqrt()
+    }
+
+    fn sample_skewness(&self) -> f64 {
+        let n = self.count as f64;
+        let std = self.sample_std();
+
+        if std == 0.0 {
+            return 0.0;
+        }
+
+        let sum_cubed = self.m3 / std.powi(3);
+        (n / ((n - 1.0) * (n - 2.0))) * sum_cubed
+    }
+
+    fn sample_kurtosis(&self) -> f64 {
+        let n = self.count as f64;
+        let std = self.sample_std();
+
+        if std == 0.0 {
+            return 0.0;
+        }
+
+        let sum_fourth = self.m4 / std.powi(4);
+        ((n * (n + 1.0)) / ((n - 1.0) * (n - 2.0) * (n - 3.0))) * sum_fourth
+            - (3.0 * (n - 1.0).powi(2)) / ((n - 2.0) * (n - 3.0))
+    }
+}
+
+fn moments_unchecked(data: &[f64]) -> Moments {
+    let mut moments = Moments::new();
+    for &value in data {
+        moments.update(value);
+    }
+    moments
+}
+
 fn variance_unchecked(data: &[f64], ddof: usize) -> f64 {
-    let mean_value = mean_unchecked(data);
-    let sum_sq_diff: f64 = data.iter().map(|&x| (x - mean_value).powi(2)).sum();
-    sum_sq_diff / (data.len() - ddof) as f64
+    let mut mean = 0.0;
+    let mut m2 = 0.0;
+
+    for (i, &value) in data.iter().enumerate() {
+        let delta = value - mean;
+        mean += delta / (i as f64 + 1.0);
+        m2 += delta * (value - mean);
+    }
+
+    let variance = m2 / (data.len() - ddof) as f64;
+    if variance < 0.0 { 0.0 } else { variance }
 }
 
 fn skewness_unchecked(data: &[f64]) -> f64 {
-    let mean_value = mean_unchecked(data);
-    let n = data.len() as f64;
-    let std = variance_unchecked(data, 1).sqrt();
-
-    if std == 0.0 {
-        return 0.0;
-    }
-
-    let sum_cubed: f64 = data.iter().map(|&x| ((x - mean_value) / std).powi(3)).sum();
-
-    // Sample skewness with bias correction.
-    (n / ((n - 1.0) * (n - 2.0))) * sum_cubed
+    moments_unchecked(data).sample_skewness()
 }
 
 fn kurtosis_unchecked(data: &[f64]) -> f64 {
-    let mean_value = mean_unchecked(data);
-    let n = data.len() as f64;
-    let std = variance_unchecked(data, 1).sqrt();
-
-    if std == 0.0 {
-        return 0.0;
-    }
-
-    let sum_fourth: f64 = data.iter().map(|&x| ((x - mean_value) / std).powi(4)).sum();
-
-    // Sample kurtosis with bias correction (excess kurtosis).
-    ((n * (n + 1.0)) / ((n - 1.0) * (n - 2.0) * (n - 3.0))) * sum_fourth
-        - (3.0 * (n - 1.0).powi(2)) / ((n - 2.0) * (n - 3.0))
+    moments_unchecked(data).sample_kurtosis()
 }
 
 fn quantiles_unchecked(data: &[f64], qs: &[f64]) -> Result<Vec<f64>> {
@@ -227,17 +293,16 @@ pub fn calculate_stat(data: &[f64]) -> Result<TimeSeriesStats> {
     ensure_finite("calculate_stat", data)?;
 
     let count = data.len();
-    let sum: f64 = data.iter().sum();
-    let mean_value = mean_unchecked(data);
-    let variance_value = variance_unchecked(data, 1);
-    let std_dev = variance_value.sqrt();
-    let skew = skewness_unchecked(data);
-    let kurt = kurtosis_unchecked(data);
+    let mut sum = 0.0;
+    let mut moments = Moments::new();
 
-    // Compute extrema and range in a single pass.
+    // Compute moments, extrema, and sum in a single pass.
     let mut min_value = f64::INFINITY;
     let mut max_value = f64::NEG_INFINITY;
     for &value in data {
+        sum += value;
+        moments.update(value);
+
         if value < min_value {
             min_value = value;
         }
@@ -245,6 +310,12 @@ pub fn calculate_stat(data: &[f64]) -> Result<TimeSeriesStats> {
             max_value = value;
         }
     }
+
+    let mean_value = moments.mean;
+    let variance_value = moments.variance(1);
+    let std_dev = variance_value.sqrt();
+    let skew = moments.sample_skewness();
+    let kurt = moments.sample_kurtosis();
 
     let range = max_value - min_value;
 

@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from dervflow._dervflow import utils as _utils
 
-
 _DEFAULT_CONFIDENCE = object()
 
 

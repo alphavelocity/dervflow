@@ -18,13 +18,13 @@ from .calc import (
     directional_derivative,
     divergence,
     gradient,
-    normalized_gradient,
     gradient_magnitude,
     hessian,
     jacobian,
     laplacian,
-    vector_laplacian,
+    normalized_gradient,
     second_derivative,
+    vector_laplacian,
 )
 from .combinatorics import (
     bell_number,
