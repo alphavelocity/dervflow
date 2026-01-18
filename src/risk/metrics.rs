@@ -62,17 +62,14 @@ fn standard_deviation(data: &[f64], ddof: usize) -> f64 {
     variance(data, ddof).sqrt()
 }
 
-fn linear_quantile(data: &[f64], q: f64) -> f64 {
-    if data.is_empty() {
+fn quantile_from_sorted(sorted: &[f64], q: f64) -> f64 {
+    if sorted.is_empty() {
         return f64::NAN;
     }
 
-    if data.len() == 1 {
-        return data[0];
+    if sorted.len() == 1 {
+        return sorted[0];
     }
-
-    let mut sorted = data.to_vec();
-    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
     if q <= 0.0 {
         return sorted[0];
@@ -516,8 +513,10 @@ pub fn tail_ratio(returns: &[f64], percentile: f64) -> Result<f64> {
         ));
     }
 
-    let lower = linear_quantile(returns, 1.0 - percentile);
-    let upper = linear_quantile(returns, percentile);
+    let mut sorted = returns.to_vec();
+    sorted.sort_unstable_by(f64::total_cmp);
+    let lower = quantile_from_sorted(&sorted, 1.0 - percentile);
+    let upper = quantile_from_sorted(&sorted, percentile);
 
     if !lower.is_finite() || !upper.is_finite() {
         return Err(DervflowError::NumericalError(
