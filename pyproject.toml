@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "dervflow"
-version = "0.1.0"
+version = "0.1.1"
 description = "A Lightweight, High-Performance Mathematics & Quantitative Finance Toolkit"
 readme = "README.md"
 requires-python = ">=3.10,<3.15"

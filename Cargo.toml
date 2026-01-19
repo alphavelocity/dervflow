@@ -1,6 +1,6 @@
 [package]
 name = "dervflow"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 authors = ["Soumyadip Sarkar"]
 description = "A Lightweight, High-Performance Mathematics & Quantitative Finance Toolkit"

@@ -31,8 +31,7 @@ Features
 - Sortino ratio and other risk-adjusted performance metrics
 - Numerical Greeks using finite differences with configurable precision
 - Portfolio risk decomposition (volatility, risk contributions, diversification ratios)
-- Active risk analytics (tracking error, information ratio, active share) and CAPM metrics
- - Active risk analytics (tracking error, information ratio, active share) with active-return decomposition and CAPM metrics
+- Active risk analytics (tracking error, information ratio, active share) with active-return decomposition and CAPM metrics
 
 Examples
 --------

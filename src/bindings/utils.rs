@@ -144,6 +144,31 @@ fn std(data: &[f64], ddof: usize) -> f64 {
     variance.sqrt()
 }
 
+fn mean_std_welford(data: &[f64]) -> (f64, f64) {
+    if data.is_empty() {
+        return (f64::NAN, f64::NAN);
+    }
+
+    let mut mean = 0.0;
+    let mut m2 = 0.0;
+    let mut count = 0.0;
+
+    for &value in data {
+        count += 1.0;
+        let delta = value - mean;
+        mean += delta / count;
+        let delta2 = value - mean;
+        m2 += delta * delta2;
+    }
+
+    if count < 2.0 {
+        return (mean, 0.0);
+    }
+
+    let variance = m2 / (count - 1.0);
+    (mean, variance.sqrt())
+}
+
 fn canonical_method(method: &str) -> PyResult<&'static str> {
     let mut key = method.trim().to_lowercase();
     key = key.replace('-', "_");
@@ -245,6 +270,48 @@ fn linear_quantile(data: &[f64], q: f64) -> f64 {
 
     let weight = position - lower_index as f64;
     sorted[lower_index] * (1.0 - weight) + sorted[upper_index] * weight
+}
+
+enum CornishFisherOutcome {
+    Constant { mean: f64 },
+    Adjusted { mean: f64, std_dev: f64, z: f64 },
+}
+
+fn cornish_fisher_outcome(returns: &[f64], confidence: f64) -> PyResult<CornishFisherOutcome> {
+    let (mean_value, std_dev) = mean_std_welford(returns);
+    if std_dev == 0.0 || !std_dev.is_finite() {
+        return Ok(CornishFisherOutcome::Constant { mean: mean_value });
+    }
+
+    let inv_std = 1.0 / std_dev;
+    let mut skew_sum = 0.0;
+    let mut kurt_sum = 0.0;
+
+    for &value in returns {
+        let z = (value - mean_value) * inv_std;
+        let z2 = z * z;
+        skew_sum += z2 * z;
+        kurt_sum += z2 * z2;
+    }
+
+    let n = returns.len() as f64;
+    let skewness = skew_sum / n;
+    let kurtosis = kurt_sum / n - 3.0;
+
+    let normal =
+        Normal::new(0.0, 1.0).map_err(|err| PyErr::new::<PyValueError, _>(err.to_string()))?;
+    let alpha = 1.0 - confidence;
+    let mut z = normal.inverse_cdf(alpha);
+
+    z += (z.powi(2) - 1.0) * skewness / 6.0;
+    z += (z.powi(3) - 3.0 * z) * kurtosis / 24.0;
+    z -= (2.0 * z.powi(3) - 5.0 * z) * skewness.powi(2) / 36.0;
+
+    Ok(CornishFisherOutcome::Adjusted {
+        mean: mean_value,
+        std_dev,
+        z,
+    })
 }
 
 fn prepare_return_and_risk_free(
@@ -720,38 +787,12 @@ fn value_at_risk(
             })?;
             let return_array = to_1d_array(returns, "returns")?;
 
-            if return_array.len() == 1 {
-                let mean = return_array[0];
-                return Ok((-mean).max(0.0));
+            match cornish_fisher_outcome(&return_array, confidence)? {
+                CornishFisherOutcome::Constant { mean } => Ok((-mean).max(0.0)),
+                CornishFisherOutcome::Adjusted { mean, std_dev, z } => {
+                    Ok((-(mean + std_dev * z)).max(0.0))
+                }
             }
-
-            let mean_value = array_mean(&return_array);
-            let std_dev = std(&return_array, 1);
-            if std_dev == 0.0 {
-                return Ok((-mean_value).max(0.0));
-            }
-
-            let standardized: Vec<f64> = return_array
-                .iter()
-                .map(|value| (value - mean_value) / std_dev)
-                .collect();
-
-            let normal = Normal::new(0.0, 1.0)
-                .map_err(|err| PyErr::new::<PyValueError, _>(err.to_string()))?;
-            let alpha = 1.0 - confidence;
-            let mut z = normal.inverse_cdf(alpha);
-
-            let skewness =
-                standardized.iter().map(|z| z.powi(3)).sum::<f64>() / standardized.len() as f64;
-            let kurtosis = standardized.iter().map(|z| z.powi(4)).sum::<f64>()
-                / standardized.len() as f64
-                - 3.0;
-
-            z += (z.powi(2) - 1.0) * skewness / 6.0;
-            z += (z.powi(3) - 3.0 * z) * kurtosis / 24.0;
-            z -= (2.0 * z.powi(3) - 5.0 * z) * skewness.powi(2) / 36.0;
-
-            Ok((-(mean_value + std_dev * z)).max(0.0))
         }
         "monte_carlo" => {
             let mean_value = mean.ok_or_else(|| {
@@ -857,71 +898,27 @@ fn conditional_value_at_risk(
             })?;
             let return_array = to_1d_array(returns, "returns")?;
 
-            let var = if return_array.len() == 1 {
-                (-return_array[0]).max(0.0)
-            } else {
-                let mean_value = array_mean(&return_array);
-                let std_dev = std(&return_array, 1);
-                if std_dev == 0.0 {
-                    return Ok((-mean_value).max(0.0));
+            let outcome = cornish_fisher_outcome(&return_array, confidence)?;
+            let var = match &outcome {
+                CornishFisherOutcome::Constant { mean } => (-mean).max(0.0),
+                CornishFisherOutcome::Adjusted { mean, std_dev, z } => {
+                    (-(mean + std_dev * z)).max(0.0)
                 }
-
-                let standardized: Vec<f64> = return_array
-                    .iter()
-                    .map(|value| (value - mean_value) / std_dev)
-                    .collect();
-
-                let normal = Normal::new(0.0, 1.0)
-                    .map_err(|err| PyErr::new::<PyValueError, _>(err.to_string()))?;
-                let alpha = 1.0 - confidence;
-                let mut z = normal.inverse_cdf(alpha);
-
-                let skewness =
-                    standardized.iter().map(|z| z.powi(3)).sum::<f64>() / standardized.len() as f64;
-                let kurtosis = standardized.iter().map(|z| z.powi(4)).sum::<f64>()
-                    / standardized.len() as f64
-                    - 3.0;
-
-                z += (z.powi(2) - 1.0) * skewness / 6.0;
-                z += (z.powi(3) - 3.0 * z) * kurtosis / 24.0;
-                z -= (2.0 * z.powi(3) - 5.0 * z) * skewness.powi(2) / 36.0;
-
-                (-(mean_value + std_dev * z)).max(0.0)
             };
 
             if return_array.len() <= 1 {
                 return Ok(var);
             }
 
-            let mean_value = array_mean(&return_array);
-            let std_dev = std(&return_array, 1);
-            if std_dev == 0.0 {
-                return Ok(var);
+            match outcome {
+                CornishFisherOutcome::Constant { .. } => Ok(var),
+                CornishFisherOutcome::Adjusted { mean, std_dev, z } => {
+                    let alpha = 1.0 - confidence;
+                    let pdf = (-0.5 * z * z).exp() / (2.0 * std::f64::consts::PI).sqrt();
+                    let cvar = -mean + std_dev * (pdf / alpha);
+                    Ok(cvar.max(var))
+                }
             }
-
-            let normal = Normal::new(0.0, 1.0)
-                .map_err(|err| PyErr::new::<PyValueError, _>(err.to_string()))?;
-            let alpha = 1.0 - confidence;
-            let mut z = normal.inverse_cdf(alpha);
-
-            let standardized: Vec<f64> = return_array
-                .iter()
-                .map(|value| (value - mean_value) / std_dev)
-                .collect();
-
-            let skewness =
-                standardized.iter().map(|z| z.powi(3)).sum::<f64>() / standardized.len() as f64;
-            let kurtosis = standardized.iter().map(|z| z.powi(4)).sum::<f64>()
-                / standardized.len() as f64
-                - 3.0;
-
-            z += (z.powi(2) - 1.0) * skewness / 6.0;
-            z += (z.powi(3) - 3.0 * z) * kurtosis / 24.0;
-            z -= (2.0 * z.powi(3) - 5.0 * z) * skewness.powi(2) / 36.0;
-
-            let pdf = normal.pdf(z);
-            let cvar = -mean_value + std_dev * (pdf / alpha);
-            Ok(cvar.max(var))
         }
         "monte_carlo" => {
             let mean_value = mean.ok_or_else(|| {
