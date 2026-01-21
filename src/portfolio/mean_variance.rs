@@ -140,9 +140,39 @@ impl MeanVarianceOptimizer {
             )));
         }
 
+        for (index, value) in expected_returns.iter().enumerate() {
+            if !value.is_finite() {
+                return Err(DervflowError::InvalidInput(format!(
+                    "Expected return at index {} is not finite",
+                    index
+                )));
+            }
+        }
+
         // Check if covariance matrix is symmetric
         for i in 0..n_assets {
+            let diag = covariance[(i, i)];
+            if !diag.is_finite() {
+                return Err(DervflowError::InvalidInput(format!(
+                    "Covariance matrix contains non-finite diagonal entry at ({}, {})",
+                    i, i
+                )));
+            }
+            if diag < -1e-12 {
+                return Err(DervflowError::InvalidInput(format!(
+                    "Covariance matrix has negative variance at ({}, {})",
+                    i, i
+                )));
+            }
             for j in i + 1..n_assets {
+                let left = covariance[(i, j)];
+                let right = covariance[(j, i)];
+                if !left.is_finite() || !right.is_finite() {
+                    return Err(DervflowError::InvalidInput(format!(
+                        "Covariance matrix contains non-finite entry at ({}, {})",
+                        i, j
+                    )));
+                }
                 if (covariance[(i, j)] - covariance[(j, i)]).abs() > 1e-10 {
                     return Err(DervflowError::InvalidInput(
                         "Covariance matrix must be symmetric".to_string(),
@@ -186,21 +216,14 @@ impl MeanVarianceOptimizer {
             ));
         }
 
-        for i in 0..self.n_assets {
-            if min_w[i] > max_w[i] {
-                return Err(DervflowError::InvalidInput(format!(
-                    "Minimum weight ({}) exceeds maximum weight ({}) for asset {}",
-                    min_w[i], max_w[i], i
-                )));
-            }
-        }
+        let sum_min = self.validate_weight_bounds(min_w, max_w)?;
 
         match target {
             OptimizationTarget::MinimizeVariance { target_return } => {
                 self.minimize_variance_with_target_return(target_return, min_w, max_w)
             }
             OptimizationTarget::MaximizeReturn { target_variance } => {
-                self.maximize_return_with_target_variance(target_variance, min_w, max_w)
+                self.maximize_return_with_target_variance(target_variance, min_w, max_w, sum_min)
             }
             OptimizationTarget::MaximizeSharpeRatio { risk_free_rate } => {
                 self.maximize_sharpe_ratio(risk_free_rate, min_w, max_w)
@@ -302,6 +325,7 @@ impl MeanVarianceOptimizer {
         target_variance: f64,
         min_weights: &[f64],
         max_weights: &[f64],
+        sum_min: f64,
     ) -> Result<OptimizationResult> {
         // This is more complex as variance constraint is quadratic
         // We'll use a binary search approach to find the optimal portfolio
@@ -316,16 +340,8 @@ impl MeanVarianceOptimizer {
         let target_volatility = target_variance.sqrt();
 
         // Find the range of feasible returns
-        let min_return = self
-            .expected_returns
-            .iter()
-            .cloned()
-            .fold(f64::INFINITY, f64::min);
-        let max_return = self
-            .expected_returns
-            .iter()
-            .cloned()
-            .fold(f64::NEG_INFINITY, f64::max);
+        let (min_return, max_return) =
+            self.feasible_return_range(min_weights, max_weights, sum_min)?;
 
         // Binary search for the return that gives us the target volatility
         let mut low = min_return;
@@ -565,6 +581,105 @@ impl MeanVarianceOptimizer {
             indices: indices.into(),
             data: data.into(),
         }
+    }
+
+    fn validate_weight_bounds(&self, min_weights: &[f64], max_weights: &[f64]) -> Result<f64> {
+        let mut sum_min = 0.0;
+        let mut sum_max = 0.0;
+
+        for i in 0..self.n_assets {
+            let min_weight = min_weights[i];
+            let max_weight = max_weights[i];
+
+            if !min_weight.is_finite() || !max_weight.is_finite() {
+                return Err(DervflowError::InvalidInput(format!(
+                    "Weight bounds at index {} must be finite",
+                    i
+                )));
+            }
+
+            if min_weight > max_weight {
+                return Err(DervflowError::InvalidInput(format!(
+                    "Minimum weight ({}) exceeds maximum weight ({}) for asset {}",
+                    min_weight, max_weight, i
+                )));
+            }
+
+            sum_min += min_weight;
+            sum_max += max_weight;
+        }
+
+        if sum_min > 1.0 + 1e-10 {
+            return Err(DervflowError::OptimizationInfeasible(
+                "Minimum weights sum to more than 1.0".to_string(),
+            ));
+        }
+
+        if sum_max < 1.0 - 1e-10 {
+            return Err(DervflowError::OptimizationInfeasible(
+                "Maximum weights sum to less than 1.0".to_string(),
+            ));
+        }
+
+        Ok(sum_min)
+    }
+
+    fn feasible_return_range(
+        &self,
+        min_weights: &[f64],
+        max_weights: &[f64],
+        sum_min: f64,
+    ) -> Result<(f64, f64)> {
+        let base_return: f64 = min_weights
+            .iter()
+            .zip(self.expected_returns.iter())
+            .map(|(w, r)| w * r)
+            .sum();
+
+        let remaining = (1.0 - sum_min).max(0.0);
+
+        let mut sorted: Vec<usize> = (0..self.n_assets).collect();
+        sorted.sort_by(|a, b| {
+            self.expected_returns[*a]
+                .partial_cmp(&self.expected_returns[*b])
+                .unwrap()
+        });
+
+        let mut max_return = base_return;
+        let mut remaining_max = remaining;
+        for &idx in sorted.iter().rev() {
+            if remaining_max <= 0.0 {
+                break;
+            }
+
+            let cap = (max_weights[idx] - min_weights[idx]).max(0.0);
+            if cap <= 0.0 {
+                continue;
+            }
+
+            let add = remaining_max.min(cap);
+            max_return += add * self.expected_returns[idx];
+            remaining_max -= add;
+        }
+
+        let mut min_return = base_return;
+        let mut remaining_min = remaining;
+        for &idx in &sorted {
+            if remaining_min <= 0.0 {
+                break;
+            }
+
+            let cap = (max_weights[idx] - min_weights[idx]).max(0.0);
+            if cap <= 0.0 {
+                continue;
+            }
+
+            let add = remaining_min.min(cap);
+            min_return += add * self.expected_returns[idx];
+            remaining_min -= add;
+        }
+
+        Ok((min_return, max_return))
     }
 
     fn build_result(
@@ -948,5 +1063,27 @@ mod tests {
         assert_relative_eq!(summary.volatility, volatility, epsilon = 1e-12);
         assert!(summary.sharpe_ratio.unwrap() > 0.0);
         assert!(summary.diversification_ratio >= 0.0);
+    }
+
+    #[test]
+    fn test_maximize_return_with_fixed_weights() {
+        let expected_returns = vec![0.01, 0.2];
+        let cov = DMatrix::from_row_slice(2, 2, &[0.04, 0.0, 0.0, 0.09]);
+        let optimizer = MeanVarianceOptimizer::new(expected_returns, cov).unwrap();
+
+        let min_weights = vec![0.9, 0.1];
+        let max_weights = vec![0.9, 0.1];
+        let target_variance = 0.9_f64.powi(2) * 0.04 + 0.1_f64.powi(2) * 0.09;
+
+        let result = optimizer
+            .optimize(
+                OptimizationTarget::MaximizeReturn { target_variance },
+                Some(&min_weights),
+                Some(&max_weights),
+            )
+            .unwrap();
+
+        assert_relative_eq!(result.weights[0], 0.9, epsilon = 1e-8);
+        assert_relative_eq!(result.weights[1], 0.1, epsilon = 1e-8);
     }
 }
