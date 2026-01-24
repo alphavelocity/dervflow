@@ -131,75 +131,69 @@ where
     params.validate().map_err(DervflowError::InvalidInput)?;
 
     let config = config.unwrap_or_default();
+    let spot_bump = ensure_positive_bump("spot", config.spot_bump)?;
+    let vol_bump = ensure_positive_bump("volatility", config.vol_bump)?;
+    let time_bump = ensure_positive_bump("time", config.time_bump)?;
+    let rate_bump = ensure_positive_bump("rate", config.rate_bump)?;
 
     // Get base price
     let base_price = pricing_fn(params)?;
 
+    let h_spot = params.spot * spot_bump;
+    if !h_spot.is_finite() || h_spot <= 0.0 {
+        return Err(DervflowError::InvalidInput(format!(
+            "spot bump results in invalid step size: {h_spot}"
+        )));
+    }
+    let (price_up, price_down) = spot_bumped_prices(pricing_fn, params, h_spot)?;
+
     // Calculate Delta using central difference: (V(S+h) - V(S-h)) / (2h)
-    let delta = calculate_delta(pricing_fn, params, base_price, config.spot_bump)?;
-
-    // Calculate Gamma using central difference: (V(S+h) - 2V(S) + V(S-h)) / h²
-    let gamma = calculate_gamma(pricing_fn, params, base_price, config.spot_bump)?;
-
-    // Calculate Vega using central difference: (V(σ+h) - V(σ-h)) / (2h)
-    let vega = calculate_vega(pricing_fn, params, config.vol_bump)?;
-
-    // Calculate Theta using forward difference: (V(t-h) - V(t)) / h
-    // Note: We use forward difference because we can't go back in time
-    let theta = calculate_theta(pricing_fn, params, base_price, config.time_bump)?;
-
-    // Calculate Rho using central difference: (V(r+h) - V(r-h)) / (2h)
-    let rho = calculate_rho(pricing_fn, params, config.rate_bump)?;
-
-    Ok(Greeks::new(delta, gamma, vega, theta, rho))
-}
-
-/// Calculate Delta using central difference method
-fn calculate_delta<F>(
-    pricing_fn: &F,
-    params: &OptionParams,
-    _base_price: f64,
-    spot_bump: f64,
-) -> Result<f64>
-where
-    F: Fn(&OptionParams) -> Result<f64>,
-{
-    let h = params.spot * spot_bump;
-
-    // Price with spot bumped up
-    let mut params_up = *params;
-    params_up.spot = params.spot + h;
-    let price_up = pricing_fn(&params_up)?;
-
-    // Price with spot bumped down
-    let mut params_down = *params;
-    params_down.spot = params.spot - h;
-    let price_down = pricing_fn(&params_down)?;
-
-    // Central difference
-    let delta = (price_up - price_down) / (2.0 * h);
-
+    let delta = (price_up - price_down) / (2.0 * h_spot);
     if !delta.is_finite() {
         return Err(DervflowError::NumericalError(
             "Delta calculation resulted in non-finite value".to_string(),
         ));
     }
 
-    Ok(delta)
+    // Calculate Gamma using central difference: (V(S+h) - 2V(S) + V(S-h)) / h²
+    let gamma = (price_up - 2.0 * base_price + price_down) / (h_spot * h_spot);
+    if !gamma.is_finite() {
+        return Err(DervflowError::NumericalError(
+            "Gamma calculation resulted in non-finite value".to_string(),
+        ));
+    }
+
+    // Calculate Vega using central difference: (V(σ+h) - V(σ-h)) / (2h)
+    let vega = calculate_vega(pricing_fn, params, vol_bump)?;
+
+    // Calculate Theta using forward difference: (V(t-h) - V(t)) / h
+    // Note: We use forward difference because we can't go back in time
+    let theta = calculate_theta(pricing_fn, params, base_price, time_bump)?;
+
+    // Calculate Rho using central difference: (V(r+h) - V(r-h)) / (2h)
+    let rho = calculate_rho(pricing_fn, params, rate_bump)?;
+
+    Ok(Greeks::new(delta, gamma, vega, theta, rho))
 }
 
-/// Calculate Gamma using second-order central difference
-fn calculate_gamma<F>(
-    pricing_fn: &F,
-    params: &OptionParams,
-    _base_price: f64,
-    spot_bump: f64,
-) -> Result<f64>
+fn ensure_positive_bump(name: &str, bump: f64) -> Result<f64> {
+    if !bump.is_finite() {
+        return Err(DervflowError::InvalidInput(format!(
+            "{name} bump must be finite, got {bump}"
+        )));
+    }
+    if bump <= 0.0 {
+        return Err(DervflowError::InvalidInput(format!(
+            "{name} bump must be positive, got {bump}"
+        )));
+    }
+    Ok(bump)
+}
+
+fn spot_bumped_prices<F>(pricing_fn: &F, params: &OptionParams, h: f64) -> Result<(f64, f64)>
 where
     F: Fn(&OptionParams) -> Result<f64>,
 {
-    let h = params.spot * spot_bump;
-
     // Price with spot bumped up
     let mut params_up = *params;
     params_up.spot = params.spot + h;
@@ -210,16 +204,7 @@ where
     params_down.spot = params.spot - h;
     let price_down = pricing_fn(&params_down)?;
 
-    // Second derivative: (V(S+h) - 2V(S) + V(S-h)) / h²
-    let gamma = (price_up - 2.0 * _base_price + price_down) / (h * h);
-
-    if !gamma.is_finite() {
-        return Err(DervflowError::NumericalError(
-            "Gamma calculation resulted in non-finite value".to_string(),
-        ));
-    }
-
-    Ok(gamma)
+    Ok((price_up, price_down))
 }
 
 /// Calculate Vega using central difference method
