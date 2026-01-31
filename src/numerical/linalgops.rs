@@ -16,22 +16,17 @@ use nalgebra::{DMatrix, DVector};
 use std::str::FromStr;
 
 /// Supported matrix norms
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum MatrixNorm {
     /// Maximum absolute column sum
     One,
     /// Maximum absolute row sum
     Infinity,
     /// Frobenius norm
+    #[default]
     Frobenius,
     /// Spectral (2) norm
     Spectral,
-}
-
-impl Default for MatrixNorm {
-    fn default() -> Self {
-        MatrixNorm::Frobenius
-    }
 }
 
 impl FromStr for MatrixNorm {

@@ -30,7 +30,7 @@ fn validate_shape(shape: &[usize], context: &str) -> Result<()> {
         )));
     }
 
-    if shape.iter().any(|&dim| dim == 0) {
+    if shape.contains(&0) {
         return Err(DervflowError::InvalidInput(format!(
             "Dimensions for {} must be non-zero",
             context
@@ -314,23 +314,17 @@ pub fn divergence(field: &[f64], shape: &[usize], spacings: &[f64]) -> Result<Ve
     }
 
     let strides = compute_strides(shape);
-    let mut result = vec![0.0; product(shape)];
+    let total_points = product(shape);
+    let mut result = vec![0.0; total_points];
     let mut coords = vec![0usize; dims];
 
-    let total_points = product(shape);
-
-    for linear_idx in 0..total_points {
+    for (linear_idx, result_value) in result.iter_mut().enumerate() {
         unravel_index(linear_idx, shape, &mut coords);
-        let storage_index = coords
-            .iter()
-            .zip(strides.iter())
-            .fold(0usize, |acc, (&coord, &stride)| acc + coord * stride);
         let mut divergence_value = 0.0;
-        for axis in 0..dims {
-            let spacing = spacings[axis];
+        for (axis, &spacing) in spacings.iter().enumerate().take(dims) {
             let component_offset = axis;
             let component_slice =
-                &field[component_offset * product(shape)..(component_offset + 1) * product(shape)];
+                &field[component_offset * total_points..(component_offset + 1) * total_points];
             divergence_value += first_derivative_along_axis(
                 component_slice,
                 shape,
@@ -340,7 +334,7 @@ pub fn divergence(field: &[f64], shape: &[usize], spacings: &[f64]) -> Result<Ve
                 spacing,
             );
         }
-        result[storage_index] = divergence_value;
+        *result_value = divergence_value;
     }
 
     Ok(result)
@@ -441,20 +435,13 @@ pub fn laplacian(values: &[f64], shape: &[usize], spacings: &[f64]) -> Result<Ve
     let mut coords = vec![0usize; dims];
     let mut result = vec![0.0; total_points];
 
-    for linear_idx in 0..total_points {
+    for (linear_idx, result_value) in result.iter_mut().enumerate() {
         unravel_index(linear_idx, shape, &mut coords);
         let mut value = 0.0;
-        for axis in 0..dims {
-            value += second_derivative_along_axis(
-                values,
-                shape,
-                &strides,
-                &coords,
-                axis,
-                spacings[axis],
-            );
+        for (axis, &spacing) in spacings.iter().enumerate().take(dims) {
+            value += second_derivative_along_axis(values, shape, &strides, &coords, axis, spacing);
         }
-        result[linear_idx] = value;
+        *result_value = value;
     }
 
     Ok(result)
@@ -624,14 +611,14 @@ pub fn jacobian(field: &[f64], shape: &[usize], spacings: &[f64]) -> Result<Vec<
         unravel_index(linear_idx, shape, &mut coords);
         for component in 0..components {
             let component_slice = &field[component * total_points..(component + 1) * total_points];
-            for axis in 0..dims {
+            for (axis, &spacing) in spacings.iter().enumerate().take(dims) {
                 let derivative = first_derivative_along_axis(
                     component_slice,
                     shape,
                     &strides,
                     &coords,
                     axis,
-                    spacings[axis],
+                    spacing,
                 );
                 let offset = (linear_idx * components + component) * dims + axis;
                 result[offset] = derivative;

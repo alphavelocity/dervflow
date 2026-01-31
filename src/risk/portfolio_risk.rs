@@ -187,14 +187,14 @@ pub fn portfolio_summary(
 ) -> Result<PortfolioSummary> {
     validate_inputs(weights, covariance)?;
 
-    if let Some(er) = expected_returns {
-        if er.len() != weights.len() {
-            return Err(DervflowError::InvalidInput(format!(
-                "Expected returns length ({}) does not match number of assets ({})",
-                er.len(),
-                weights.len()
-            )));
-        }
+    if let Some(er) = expected_returns
+        && er.len() != weights.len()
+    {
+        return Err(DervflowError::InvalidInput(format!(
+            "Expected returns length ({}) does not match number of assets ({})",
+            er.len(),
+            weights.len()
+        )));
     }
 
     let variance = portfolio_variance(weights, covariance)?;
@@ -317,14 +317,14 @@ pub fn portfolio_parametric_var_contributions(
     validate_inputs(weights, covariance)?;
 
     let n = weights.len();
-    if let Some(er) = expected_returns {
-        if er.len() != n {
-            return Err(DervflowError::InvalidInput(format!(
-                "Expected returns length ({}) does not match number of assets ({})",
-                er.len(),
-                n
-            )));
-        }
+    if let Some(er) = expected_returns
+        && er.len() != n
+    {
+        return Err(DervflowError::InvalidInput(format!(
+            "Expected returns length ({}) does not match number of assets ({})",
+            er.len(),
+            n
+        )));
     }
 
     let volatility = portfolio_volatility(weights, covariance)?;
@@ -384,14 +384,14 @@ pub fn portfolio_parametric_cvar_contributions(
     validate_inputs(weights, covariance)?;
 
     let n = weights.len();
-    if let Some(er) = expected_returns {
-        if er.len() != n {
-            return Err(DervflowError::InvalidInput(format!(
-                "Expected returns length ({}) does not match number of assets ({})",
-                er.len(),
-                n
-            )));
-        }
+    if let Some(er) = expected_returns
+        && er.len() != n
+    {
+        return Err(DervflowError::InvalidInput(format!(
+            "Expected returns length ({}) does not match number of assets ({})",
+            er.len(),
+            n
+        )));
     }
 
     let volatility = portfolio_volatility(weights, covariance)?;
@@ -513,14 +513,14 @@ pub fn active_portfolio_metrics(
         )));
     }
 
-    if let Some(er) = expected_returns {
-        if er.len() != weights.len() {
-            return Err(DervflowError::InvalidInput(format!(
-                "Expected returns length ({}) does not match number of assets ({})",
-                er.len(),
-                weights.len()
-            )));
-        }
+    if let Some(er) = expected_returns
+        && er.len() != weights.len()
+    {
+        return Err(DervflowError::InvalidInput(format!(
+            "Expected returns length ({}) does not match number of assets ({})",
+            er.len(),
+            weights.len()
+        )));
     }
 
     let active_weights: Vec<f64> = weights
@@ -846,7 +846,7 @@ mod tests {
         )
         .unwrap();
 
-        let expected_active = vec![0.1, -0.1];
+        let expected_active = [0.1, -0.1];
         for (value, expected) in metrics.active_weights.iter().zip(expected_active.iter()) {
             assert!((value - expected).abs() < 1e-12);
         }

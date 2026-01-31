@@ -46,6 +46,19 @@ pub struct IntegrationResult {
     pub converged: bool,
 }
 
+#[derive(Debug, Clone)]
+struct SimpsonResult {
+    value: f64,
+    error_estimate: f64,
+}
+
+#[derive(Debug, Clone)]
+struct AdaptiveGaussLegendreResult {
+    value: f64,
+    error_estimate: f64,
+    function_evaluations: usize,
+}
+
 /// Adaptive Simpson's rule for numerical integration
 ///
 /// Uses recursive subdivision to achieve desired accuracy.
@@ -85,15 +98,16 @@ where
     let mut function_evaluations = 0;
 
     // Helper function for Simpson's rule on an interval
-    let simpsons_rule = |x0: f64, _x1: f64, x2: f64, f0: f64, f1: f64, f2: f64| -> f64 {
+    let simpsons_rule = |x0: f64, x2: f64, f0: f64, f1: f64, f2: f64| -> f64 {
         let h = (x2 - x0) / 2.0;
         h / 3.0 * (f0 + 4.0 * f1 + f2)
     };
 
     // Evaluate function at initial points
+    let mid = (a + b) / 2.0;
     let fa = f(a);
     let fb = f(b);
-    let fc = f((a + b) / 2.0);
+    let fc = f(mid);
     function_evaluations += 3;
 
     // Check for non-finite values
@@ -103,7 +117,7 @@ where
         ));
     }
 
-    let whole = simpsons_rule(a, (a + b) / 2.0, b, fa, fc, fb);
+    let whole = simpsons_rule(a, b, fa, fc, fb);
 
     // Recursive adaptive integration
     let result = adaptive_simpsons_recursive(
@@ -111,6 +125,7 @@ where
         a,
         b,
         config.tolerance,
+        config.relative_tolerance,
         whole,
         fa,
         fc,
@@ -120,8 +135,8 @@ where
     )?;
 
     Ok(IntegrationResult {
-        value: result,
-        error_estimate: config.tolerance,
+        value: result.value,
+        error_estimate: result.error_estimate,
         function_evaluations,
         converged: true,
     })
@@ -134,13 +149,14 @@ fn adaptive_simpsons_recursive<F>(
     a: f64,
     b: f64,
     tolerance: f64,
+    relative_tolerance: f64,
     whole: f64,
     fa: f64,
     fc: f64,
     fb: f64,
     max_depth: usize,
     function_evaluations: &mut usize,
-) -> Result<f64>
+) -> Result<SimpsonResult>
 where
     F: Fn(f64) -> f64,
 {
@@ -173,15 +189,20 @@ where
 
     // Error estimate using Richardson extrapolation
     let error = (sum - whole).abs() / 15.0;
+    let tol = tolerance + relative_tolerance * sum.abs();
 
-    if error <= tolerance {
-        Ok(sum + (sum - whole) / 15.0) // Richardson extrapolation correction
+    if error <= tol {
+        Ok(SimpsonResult {
+            value: sum + (sum - whole) / 15.0,
+            error_estimate: error,
+        })
     } else {
         let left_result = adaptive_simpsons_recursive(
             f,
             a,
             c,
             tolerance / 2.0,
+            relative_tolerance,
             left,
             fa,
             fd,
@@ -195,6 +216,7 @@ where
             c,
             b,
             tolerance / 2.0,
+            relative_tolerance,
             right,
             fc,
             fe,
@@ -203,7 +225,10 @@ where
             function_evaluations,
         )?;
 
-        Ok(left_result + right_result)
+        Ok(SimpsonResult {
+            value: left_result.value + right_result.value,
+            error_estimate: left_result.error_estimate + right_result.error_estimate,
+        })
     }
 }
 
@@ -438,51 +463,21 @@ where
         )));
     }
 
-    let mut function_evaluations = 0;
+    let result = adaptive_gauss_legendre_recursive(
+        &f,
+        a,
+        b,
+        config.tolerance,
+        config.relative_tolerance,
+        config.max_iterations,
+    )?;
 
-    // Use 5-point and 10-point rules for error estimation
-    let result_5 = gauss_legendre(&f, a, b, 5)?;
-    let result_10 = gauss_legendre(&f, a, b, 10)?;
-    function_evaluations += result_5.function_evaluations + result_10.function_evaluations;
-
-    let error = (result_10.value - result_5.value).abs();
-    let tolerance = config.tolerance + config.relative_tolerance * result_10.value.abs();
-
-    if error <= tolerance {
-        Ok(IntegrationResult {
-            value: result_10.value,
-            error_estimate: error,
-            function_evaluations,
-            converged: true,
-        })
-    } else {
-        // Subdivide interval
-        let mid = (a + b) / 2.0;
-        let left = adaptive_gauss_legendre_recursive(
-            &f,
-            a,
-            mid,
-            config.tolerance / 2.0,
-            config.relative_tolerance,
-            config.max_iterations / 2,
-        )?;
-
-        let right = adaptive_gauss_legendre_recursive(
-            &f,
-            mid,
-            b,
-            config.tolerance / 2.0,
-            config.relative_tolerance,
-            config.max_iterations / 2,
-        )?;
-
-        Ok(IntegrationResult {
-            value: left + right,
-            error_estimate: error,
-            function_evaluations,
-            converged: true,
-        })
-    }
+    Ok(IntegrationResult {
+        value: result.value,
+        error_estimate: result.error_estimate,
+        function_evaluations: result.function_evaluations,
+        converged: true,
+    })
 }
 
 /// Recursive helper for adaptive Gauss-Legendre quadrature
@@ -493,7 +488,7 @@ fn adaptive_gauss_legendre_recursive<F>(
     tolerance: f64,
     relative_tolerance: f64,
     max_depth: usize,
-) -> Result<f64>
+) -> Result<AdaptiveGaussLegendreResult>
 where
     F: Fn(f64) -> f64,
 {
@@ -509,9 +504,14 @@ where
 
     let error = (result_10.value - result_5.value).abs();
     let tol = tolerance + relative_tolerance * result_10.value.abs();
+    let function_evaluations = result_5.function_evaluations + result_10.function_evaluations;
 
     if error <= tol {
-        Ok(result_10.value)
+        Ok(AdaptiveGaussLegendreResult {
+            value: result_10.value,
+            error_estimate: error,
+            function_evaluations,
+        })
     } else {
         let mid = (a + b) / 2.0;
         let left = adaptive_gauss_legendre_recursive(
@@ -532,7 +532,13 @@ where
             max_depth - 1,
         )?;
 
-        Ok(left + right)
+        Ok(AdaptiveGaussLegendreResult {
+            value: left.value + right.value,
+            error_estimate: left.error_estimate + right.error_estimate,
+            function_evaluations: function_evaluations
+                + left.function_evaluations
+                + right.function_evaluations,
+        })
     }
 }
 
@@ -688,10 +694,11 @@ mod tests {
         let config = IntegrationConfig::default();
 
         let result = adaptive_simpsons(f, 0.0, 1.0, &config).unwrap();
+        let tolerance = config.tolerance + config.relative_tolerance * result.value.abs();
 
         assert!(result.converged);
         assert!(result.function_evaluations > 0);
-        assert!(result.error_estimate <= config.tolerance);
+        assert!(result.error_estimate <= tolerance);
     }
 
     #[test]

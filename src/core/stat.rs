@@ -489,6 +489,6 @@ mod tests {
         assert_abs_diff_eq!(correlation(&x, &y).unwrap(), 1.0, epsilon = 1e-12);
 
         let z = z_scores(&x).unwrap();
-        assert_abs_diff_eq!(z.iter().map(|v| *v).sum::<f64>(), 0.0, epsilon = 1e-12);
+        assert_abs_diff_eq!(z.iter().copied().sum::<f64>(), 0.0, epsilon = 1e-12);
     }
 }

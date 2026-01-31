@@ -232,7 +232,7 @@ fn parse_confidence_from_float(value: f64) -> PyResult<f64> {
         confidence /= 100.0;
     }
 
-    if !confidence.is_finite() || !(0.0 < confidence && confidence < 1.0) {
+    if !(confidence.is_finite() && 0.0 < confidence && confidence < 1.0) {
         return Err(PyErr::new::<PyValueError, _>(
             "confidence_level must be between 0 and 1",
         ));
@@ -727,6 +727,7 @@ fn downside_capture_ratio(
 
 #[pyfunction]
 #[pyo3(signature = (returns=None, confidence_level=None, method="historical", mean=None, std_dev=None, num_simulations=10000, seed=None, decay=None))]
+#[allow(clippy::too_many_arguments)]
 fn value_at_risk(
     returns: Option<&Bound<'_, PyAny>>,
     confidence_level: Option<&Bound<'_, PyAny>>,
@@ -812,6 +813,7 @@ fn value_at_risk(
 
 #[pyfunction]
 #[pyo3(signature = (returns=None, confidence_level=None, method="historical", mean=None, std_dev=None, num_simulations=10000, seed=None, decay=None))]
+#[allow(clippy::too_many_arguments)]
 fn conditional_value_at_risk(
     returns: Option<&Bound<'_, PyAny>>,
     confidence_level: Option<&Bound<'_, PyAny>>,

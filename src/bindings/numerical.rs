@@ -34,6 +34,13 @@ use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::Mutex;
 
+type PyArray1D<'py> = Bound<'py, PyArray1<f64>>;
+type PyArray2D<'py> = Bound<'py, PyArray2<f64>>;
+type PyEigenResult<'py> = (PyArray1D<'py>, PyArray2D<'py>);
+type PyQrResult<'py> = (PyArray2D<'py>, PyArray2D<'py>);
+type PySvdResult<'py> = (PyArray2D<'py>, PyArray1D<'py>, PyArray2D<'py>);
+type PyLuResult<'py> = (PyArray2D<'py>, PyArray2D<'py>, PyArray2D<'py>);
+
 /// Convert Dervflow error to Python exception
 fn to_py_err(err: DervflowError) -> PyErr {
     PyValueError::new_err(err.to_string())
@@ -57,10 +64,7 @@ fn numpy_to_dvector(array: &PyReadonlyArray1<f64>) -> DVector<f64> {
     DVector::from_iterator(view.len(), view.iter().copied())
 }
 
-fn dmatrix_to_py<'py>(
-    py: Python<'py>,
-    matrix: DMatrix<f64>,
-) -> PyResult<Bound<'py, PyArray2<f64>>> {
+fn dmatrix_to_py<'py>(py: Python<'py>, matrix: DMatrix<f64>) -> PyResult<PyArray2D<'py>> {
     let rows = matrix.nrows();
     let cols = matrix.ncols();
     let mut data = Vec::with_capacity(rows * cols);
@@ -74,7 +78,7 @@ fn dmatrix_to_py<'py>(
     Ok(PyArray2::from_owned_array(py, array))
 }
 
-fn dvector_to_py<'py>(py: Python<'py>, vector: DVector<f64>) -> Bound<'py, PyArray1<f64>> {
+fn dvector_to_py<'py>(py: Python<'py>, vector: DVector<f64>) -> PyArray1D<'py> {
     let data = vector.as_slice().to_vec();
     PyArray1::from_vec(py, data)
 }
@@ -244,9 +248,7 @@ impl PyAdaptiveSimpsonsIntegrator {
                 Ok(result.into())
             }
             Err(err) => {
-                if let Err(py_err) = handle_callable_error(err_cell.clone()) {
-                    return Err(py_err);
-                }
+                handle_callable_error(err_cell.clone())?;
                 Err(to_py_err(err))
             }
         }
@@ -263,6 +265,7 @@ impl PyGaussLegendreIntegrator {
         Self
     }
 
+    #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (func, a, b, n_points, tolerance=None, relative_tolerance=None, max_iterations=None))]
     fn integrate(
         &self,
@@ -300,9 +303,7 @@ impl PyGaussLegendreIntegrator {
                 Ok(result.into())
             }
             Err(err) => {
-                if let Err(py_err) = handle_callable_error(err_cell.clone()) {
-                    return Err(py_err);
-                }
+                handle_callable_error(err_cell.clone())?;
                 Err(to_py_err(err))
             }
         }
@@ -355,9 +356,7 @@ impl PyAdaptiveGaussLegendreIntegrator {
                 Ok(result.into())
             }
             Err(err) => {
-                if let Err(py_err) = handle_callable_error(err_cell.clone()) {
-                    return Err(py_err);
-                }
+                handle_callable_error(err_cell.clone())?;
                 Err(to_py_err(err))
             }
         }
@@ -464,9 +463,7 @@ impl PyNewtonRaphsonSolver {
                 Ok(result.into())
             }
             Err(err) => {
-                if let Err(py_err) = handle_callable_error(err_cell.clone()) {
-                    return Err(py_err);
-                }
+                handle_callable_error(err_cell.clone())?;
                 Err(to_py_err(err))
             }
         }
@@ -502,9 +499,7 @@ impl PyBrentSolver {
                 Ok(result.into())
             }
             Err(err) => {
-                if let Err(py_err) = handle_callable_error(err_cell.clone()) {
-                    return Err(py_err);
-                }
+                handle_callable_error(err_cell.clone())?;
                 Err(to_py_err(err))
             }
         }
@@ -540,9 +535,7 @@ impl PyBisectionSolver {
                 Ok(result.into())
             }
             Err(err) => {
-                if let Err(py_err) = handle_callable_error(err_cell.clone()) {
-                    return Err(py_err);
-                }
+                handle_callable_error(err_cell.clone())?;
                 Err(to_py_err(err))
             }
         }
@@ -578,9 +571,7 @@ impl PySecantSolver {
                 Ok(result.into())
             }
             Err(err) => {
-                if let Err(py_err) = handle_callable_error(err_cell.clone()) {
-                    return Err(py_err);
-                }
+                handle_callable_error(err_cell.clone())?;
                 Err(to_py_err(err))
             }
         }
@@ -732,9 +723,7 @@ impl PyGradientDescentOptimizer {
                 Ok(result.into())
             }
             Err(err) => {
-                if let Err(py_err) = handle_callable_error(err_cell.clone()) {
-                    return Err(py_err);
-                }
+                handle_callable_error(err_cell.clone())?;
                 Err(to_py_err(err))
             }
         }
@@ -778,9 +767,7 @@ impl PyBFGSOptimizer {
                 Ok(result.into())
             }
             Err(err) => {
-                if let Err(py_err) = handle_callable_error(err_cell.clone()) {
-                    return Err(py_err);
-                }
+                handle_callable_error(err_cell.clone())?;
                 Err(to_py_err(err))
             }
         }
@@ -817,9 +804,7 @@ impl PyNelderMeadOptimizer {
                 Ok(result.into())
             }
             Err(err) => {
-                if let Err(py_err) = handle_callable_error(err_cell.clone()) {
-                    return Err(py_err);
-                }
+                handle_callable_error(err_cell.clone())?;
                 Err(to_py_err(err))
             }
         }
@@ -840,7 +825,7 @@ impl PyLinearAlgebra {
         &self,
         py: Python<'py>,
         matrix: PyReadonlyArray2<f64>,
-    ) -> PyResult<Bound<'py, PyArray2<f64>>> {
+    ) -> PyResult<PyArray2D<'py>> {
         let mat = numpy_to_dmatrix(&matrix);
         let l = cholesky_decomposition(&mat).map_err(to_py_err)?;
         dmatrix_to_py(py, l)
@@ -908,7 +893,7 @@ impl PyLinearAlgebra {
         py: Python<'py>,
         a: PyReadonlyArray2<f64>,
         b: PyReadonlyArray1<f64>,
-    ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    ) -> PyResult<PyArray1D<'py>> {
         let mat_a = numpy_to_dmatrix(&a);
         let vec_b = numpy_to_dvector(&b);
         let solution = solve_linear_system(&mat_a, &vec_b).map_err(to_py_err)?;
@@ -920,7 +905,7 @@ impl PyLinearAlgebra {
         py: Python<'py>,
         a: PyReadonlyArray2<f64>,
         b: PyReadonlyArray1<f64>,
-    ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    ) -> PyResult<PyArray1D<'py>> {
         let mat_a = numpy_to_dmatrix(&a);
         let vec_b = numpy_to_dvector(&b);
         let solution = solve_least_squares(&mat_a, &vec_b).map_err(to_py_err)?;
@@ -931,7 +916,7 @@ impl PyLinearAlgebra {
         &self,
         py: Python<'py>,
         matrix: PyReadonlyArray2<f64>,
-    ) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray2<f64>>)> {
+    ) -> PyResult<PyEigenResult<'py>> {
         let mat = numpy_to_dmatrix(&matrix);
         let (values, vectors) = eigen_decomposition(&mat).map_err(to_py_err)?;
         Ok((dvector_to_py(py, values), dmatrix_to_py(py, vectors)?))
@@ -941,7 +926,7 @@ impl PyLinearAlgebra {
         &self,
         py: Python<'py>,
         matrix: PyReadonlyArray2<f64>,
-    ) -> PyResult<(Bound<'py, PyArray2<f64>>, Bound<'py, PyArray2<f64>>)> {
+    ) -> PyResult<PyQrResult<'py>> {
         let mat = numpy_to_dmatrix(&matrix);
         let (q, r) = qr_decomposition(&mat).map_err(to_py_err)?;
         Ok((dmatrix_to_py(py, q)?, dmatrix_to_py(py, r)?))
@@ -951,11 +936,7 @@ impl PyLinearAlgebra {
         &self,
         py: Python<'py>,
         matrix: PyReadonlyArray2<f64>,
-    ) -> PyResult<(
-        Bound<'py, PyArray2<f64>>,
-        Bound<'py, PyArray1<f64>>,
-        Bound<'py, PyArray2<f64>>,
-    )> {
+    ) -> PyResult<PySvdResult<'py>> {
         let mat = numpy_to_dmatrix(&matrix);
         let (u, singular, v_t) = svd_decomposition(&mat).map_err(to_py_err)?;
         Ok((
@@ -969,11 +950,7 @@ impl PyLinearAlgebra {
         &self,
         py: Python<'py>,
         matrix: PyReadonlyArray2<f64>,
-    ) -> PyResult<(
-        Bound<'py, PyArray2<f64>>,
-        Bound<'py, PyArray2<f64>>,
-        Bound<'py, PyArray2<f64>>,
-    )> {
+    ) -> PyResult<PyLuResult<'py>> {
         let mat = numpy_to_dmatrix(&matrix);
         let (l, u, p) = lu_decomposition(&mat).map_err(to_py_err)?;
         Ok((
@@ -987,7 +964,7 @@ impl PyLinearAlgebra {
         &self,
         py: Python<'py>,
         matrix: PyReadonlyArray2<f64>,
-    ) -> PyResult<Bound<'py, PyArray2<f64>>> {
+    ) -> PyResult<PyArray2D<'py>> {
         let mat = numpy_to_dmatrix(&matrix);
         let exp = matrix_exponential(&mat).map_err(to_py_err)?;
         dmatrix_to_py(py, exp)

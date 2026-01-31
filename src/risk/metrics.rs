@@ -11,8 +11,6 @@
 //! downside deviation, and drawdown analysis.  They are written in pure Rust so
 //! they can be consumed both from the Rust crate and via the PyO3 bindings.
 
-use std::f64::EPSILON;
-
 use crate::common::error::{DervflowError, Result};
 
 fn ensure_non_empty(name: &str, data: &[f64]) -> Result<()> {
@@ -233,7 +231,7 @@ pub fn information_ratio(
         .collect();
     let mean_diff = mean(&diff) * periods;
 
-    if te <= EPSILON {
+    if te <= f64::EPSILON {
         return Ok(if mean_diff > 0.0 {
             f64::INFINITY
         } else if mean_diff < 0.0 {
@@ -379,7 +377,7 @@ pub fn treynor_ratio(
     let mean_excess = mean(&excess) * periods;
 
     let beta_value = beta(returns, benchmark)?;
-    if beta_value.abs() <= EPSILON {
+    if beta_value.abs() <= f64::EPSILON {
         return Ok(if mean_excess > 0.0 {
             f64::INFINITY
         } else {
@@ -411,7 +409,7 @@ pub fn omega_ratio(returns: &[f64], threshold: f64) -> Result<f64> {
     let expected_gain = gain_sum / returns.len() as f64;
     let expected_loss = loss_sum / returns.len() as f64;
 
-    if expected_loss <= EPSILON {
+    if expected_loss <= f64::EPSILON {
         return Ok(if expected_gain > 0.0 {
             f64::INFINITY
         } else {
@@ -558,7 +556,7 @@ pub fn upside_potential_ratio(returns: &[f64], threshold: f64) -> Result<f64> {
     let upside_expectation = upside_sum / count;
     let downside_expectation = (downside_square_sum / count).sqrt();
 
-    if downside_expectation <= EPSILON {
+    if downside_expectation <= f64::EPSILON {
         return Ok(if upside_expectation > 0.0 {
             f64::INFINITY
         } else {
@@ -627,7 +625,7 @@ pub fn capture_ratio(
     let portfolio_cagr = portfolio_growth.powf(periods / periods_count) - 1.0;
     let benchmark_cagr = benchmark_growth.powf(periods / periods_count) - 1.0;
 
-    if benchmark_cagr.abs() <= EPSILON {
+    if benchmark_cagr.abs() <= f64::EPSILON {
         return Ok(if portfolio_cagr > 0.0 {
             f64::INFINITY
         } else {
@@ -727,7 +725,7 @@ pub fn calmar_ratio(annual_return: f64, max_drawdown_value: f64) -> Result<f64> 
     }
 
     let magnitude = max_drawdown_value.abs();
-    if magnitude <= EPSILON {
+    if magnitude <= f64::EPSILON {
         return Ok(if annual_return > 0.0 {
             f64::INFINITY
         } else {

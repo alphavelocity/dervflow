@@ -232,13 +232,13 @@ impl PortfolioConstraints {
             }
 
             for (sector, exposure) in sector_exposures {
-                if let Some(&limit) = sector_limits.get(&sector) {
-                    if exposure > limit + 1e-6 {
-                        return Err(DervflowError::OptimizationInfeasible(format!(
-                            "Sector {} exposure ({:.6}) exceeds limit ({:.6})",
-                            sector, exposure, limit
-                        )));
-                    }
+                if let Some(&limit) = sector_limits.get(&sector)
+                    && exposure > limit + 1e-6
+                {
+                    return Err(DervflowError::OptimizationInfeasible(format!(
+                        "Sector {} exposure ({:.6}) exceeds limit ({:.6})",
+                        sector, exposure, limit
+                    )));
                 }
             }
         }
