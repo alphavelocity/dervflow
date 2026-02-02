@@ -39,7 +39,7 @@ monte_carlo = ["numerical"]
 
 [dependencies]
 # PyO3 for Python bindings
-pyo3 = { version = "0.27", features = ["abi3-py310"], optional = true }
+pyo3 = { version = "0.28", features = ["abi3-py310"], optional = true }
 numpy = { version = "0.27", optional = true }
 
 # Numerical computing
