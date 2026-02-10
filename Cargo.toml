@@ -40,7 +40,7 @@ monte_carlo = ["numerical"]
 [dependencies]
 # PyO3 for Python bindings
 pyo3 = { version = "0.27", features = ["abi3-py310"], optional = true }
-numpy = { version = "0.27", optional = true }
+numpy = { version = "0.28", optional = true }
 
 # Numerical computing
 nalgebra = { version = "0.34", features = ["serde-serialize"] }
