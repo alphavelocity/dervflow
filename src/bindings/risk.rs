@@ -22,8 +22,8 @@ use crate::risk::portfolio_risk::{
     portfolio_parametric_var_contributions, portfolio_summary,
 };
 use crate::risk::var::{
-    cornish_fisher_var, historical_cvar, historical_var, monte_carlo_cvar, monte_carlo_var,
-    parametric_cvar, parametric_var, riskmetrics_cvar, riskmetrics_var,
+    cornish_fisher_var, evt_cvar, evt_var, historical_cvar, historical_var, monte_carlo_cvar,
+    monte_carlo_var, parametric_cvar, parametric_var, riskmetrics_cvar, riskmetrics_var,
 };
 use nalgebra::DMatrix;
 
@@ -507,6 +507,156 @@ fn array2_to_dmatrix(array: PyReadonlyArray2<f64>) -> PyResult<DMatrix<f64>> {
 #[pyclass(name = "RiskMetrics")]
 pub struct PyRiskMetrics;
 
+fn normalize_method_key(method: &str) -> String {
+    #[inline]
+    fn push_separator(target: &mut String, last_was_separator: &mut bool) {
+        if !target.is_empty() && !*last_was_separator {
+            target.push('_');
+            *last_was_separator = true;
+        }
+    }
+
+    let trimmed = method.trim();
+
+    if trimmed.is_ascii() {
+        let mut normalized = String::with_capacity(trimmed.len());
+        let mut last_was_separator = false;
+
+        for byte in trimmed.bytes() {
+            let is_separator = byte == b'_' || byte == b'-' || byte.is_ascii_whitespace();
+            if is_separator {
+                push_separator(&mut normalized, &mut last_was_separator);
+            } else {
+                normalized.push(byte.to_ascii_lowercase() as char);
+                last_was_separator = false;
+            }
+        }
+
+        if last_was_separator {
+            normalized.pop();
+        }
+
+        return normalized;
+    }
+
+    let mut normalized = String::with_capacity(trimmed.len());
+    let mut last_was_separator = false;
+
+    for ch in trimmed.chars() {
+        let is_separator = ch == '_' || ch == '-' || ch.is_whitespace();
+        if is_separator {
+            push_separator(&mut normalized, &mut last_was_separator);
+        } else {
+            normalized.extend(ch.to_lowercase());
+            last_was_separator = false;
+        }
+    }
+
+    if last_was_separator {
+        normalized.pop();
+    }
+
+    normalized
+}
+
+const VAR_METHODS_ERROR_HINT: &str =
+    "'historical', 'parametric', 'cornish_fisher', 'monte_carlo', 'ewma', or 'evt'";
+const CVAR_METHODS_ERROR_HINT: &str = "'historical', 'parametric', 'monte_carlo', 'ewma', or 'evt'";
+const EVT_DEFAULT_THRESHOLD_QUANTILE: f64 = 0.90;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ParsedRiskMethod {
+    Historical,
+    Parametric,
+    CornishFisher,
+    MonteCarlo,
+    Ewma,
+    Evt,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CvarRiskMethod {
+    Historical,
+    Parametric,
+    MonteCarlo,
+    Ewma,
+    Evt,
+}
+
+impl TryFrom<ParsedRiskMethod> for CvarRiskMethod {
+    type Error = ();
+
+    fn try_from(method: ParsedRiskMethod) -> Result<Self, Self::Error> {
+        match method {
+            ParsedRiskMethod::Historical => Ok(Self::Historical),
+            ParsedRiskMethod::Parametric => Ok(Self::Parametric),
+            ParsedRiskMethod::MonteCarlo => Ok(Self::MonteCarlo),
+            ParsedRiskMethod::Ewma => Ok(Self::Ewma),
+            ParsedRiskMethod::Evt => Ok(Self::Evt),
+            ParsedRiskMethod::CornishFisher => Err(()),
+        }
+    }
+}
+
+#[inline]
+fn parse_risk_method(method: &str) -> Option<ParsedRiskMethod> {
+    match method {
+        "historical" => Some(ParsedRiskMethod::Historical),
+        "parametric" => Some(ParsedRiskMethod::Parametric),
+        "cornish_fisher" => Some(ParsedRiskMethod::CornishFisher),
+        "monte_carlo" | "montecarlo" | "mc" => Some(ParsedRiskMethod::MonteCarlo),
+        "ewma" | "riskmetrics" | "risk_metrics" | "riskmetric" | "risk_metric" => {
+            Some(ParsedRiskMethod::Ewma)
+        }
+        "evt" | "extreme_value" | "extreme_value_theory" | "pot" => Some(ParsedRiskMethod::Evt),
+        _ => None,
+    }
+}
+
+#[inline]
+fn invalid_method_error(original_method: &str, expected_methods: &str) -> PyErr {
+    PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+        "Invalid method: '{}'. Must be {expected_methods}",
+        original_method
+    ))
+}
+
+#[inline]
+fn resolve_method<T, F>(
+    normalized_method: &str,
+    original_method: &str,
+    expected_methods: &str,
+    map_method: F,
+) -> PyResult<T>
+where
+    F: FnOnce(ParsedRiskMethod) -> Option<T>,
+{
+    parse_risk_method(normalized_method)
+        .and_then(map_method)
+        .ok_or_else(|| invalid_method_error(original_method, expected_methods))
+}
+
+fn resolve_var_method(
+    normalized_method: &str,
+    original_method: &str,
+) -> PyResult<ParsedRiskMethod> {
+    resolve_method(
+        normalized_method,
+        original_method,
+        VAR_METHODS_ERROR_HINT,
+        Some,
+    )
+}
+
+fn resolve_cvar_method(normalized_method: &str, original_method: &str) -> PyResult<CvarRiskMethod> {
+    resolve_method(
+        normalized_method,
+        original_method,
+        CVAR_METHODS_ERROR_HINT,
+        |method| CvarRiskMethod::try_from(method).ok(),
+    )
+}
+
 #[pymethods]
 impl PyRiskMetrics {
     /// Create a new RiskMetrics instance
@@ -524,7 +674,7 @@ impl PyRiskMetrics {
     /// confidence_level : float
     ///     Confidence level (e.g., 0.95 for 95%)
     /// method : str
-    ///     VaR calculation method: 'historical', 'parametric', 'cornish_fisher', 'monte_carlo', or 'ewma'
+    ///     VaR calculation method: 'historical', 'parametric', 'cornish_fisher', 'monte_carlo', 'ewma', or 'evt'
     /// mean : float, optional
     ///     Expected return (required for monte_carlo method)
     /// std_dev : float, optional
@@ -535,6 +685,8 @@ impl PyRiskMetrics {
     ///     Random seed for reproducibility (for monte_carlo method)
     /// decay : float, optional
     ///     EWMA decay factor when ``method='ewma'`` (default: 0.94)
+    /// threshold_quantile : float, optional
+    ///     Tail threshold quantile when ``method='evt'`` (default: 0.90)
     ///
     /// Returns
     /// -------
@@ -549,7 +701,7 @@ impl PyRiskMetrics {
     /// >>> result = rm.var(returns, 0.95, 'historical')
     /// >>> print(result['var'])
     #[allow(clippy::too_many_arguments)]
-    #[pyo3(signature = (returns=None, confidence_level=0.95, method="historical", mean=None, std_dev=None, num_simulations=10000, seed=None, decay=None))]
+    #[pyo3(signature = (returns=None, confidence_level=0.95, method="historical", mean=None, std_dev=None, num_simulations=10000, seed=None, decay=None, threshold_quantile=None))]
     fn var(
         &self,
         py: Python<'_>,
@@ -561,13 +713,13 @@ impl PyRiskMetrics {
         num_simulations: usize,
         seed: Option<u64>,
         decay: Option<f64>,
+        threshold_quantile: Option<f64>,
     ) -> PyResult<Py<PyAny>> {
-        let mut method_key = method.trim().to_lowercase();
-        method_key = method_key.replace('-', "_");
-        method_key = method_key.replace(' ', "_");
+        let method_key = normalize_method_key(method);
+        let resolved_method = resolve_var_method(&method_key, method)?;
 
-        let var_value = match method_key.as_str() {
-            "historical" => {
+        let var_value = match resolved_method {
+            ParsedRiskMethod::Historical => {
                 let returns = returns.ok_or_else(|| {
                     PyErr::new::<pyo3::exceptions::PyValueError, _>(
                         "returns array is required for historical method",
@@ -576,7 +728,7 @@ impl PyRiskMetrics {
                 let returns_slice = returns.as_slice()?;
                 historical_var(returns_slice, confidence_level).map_err(PyErr::from)?
             }
-            "parametric" => {
+            ParsedRiskMethod::Parametric => {
                 let returns = returns.ok_or_else(|| {
                     PyErr::new::<pyo3::exceptions::PyValueError, _>(
                         "returns array is required for parametric method",
@@ -585,7 +737,7 @@ impl PyRiskMetrics {
                 let returns_slice = returns.as_slice()?;
                 parametric_var(returns_slice, confidence_level).map_err(PyErr::from)?
             }
-            "cornish_fisher" | "cornish-fisher" => {
+            ParsedRiskMethod::CornishFisher => {
                 let returns = returns.ok_or_else(|| {
                     PyErr::new::<pyo3::exceptions::PyValueError, _>(
                         "returns array is required for cornish_fisher method",
@@ -594,7 +746,7 @@ impl PyRiskMetrics {
                 let returns_slice = returns.as_slice()?;
                 cornish_fisher_var(returns_slice, confidence_level).map_err(PyErr::from)?
             }
-            "monte_carlo" | "montecarlo" | "mc" => {
+            ParsedRiskMethod::MonteCarlo => {
                 let mean = mean.ok_or_else(|| {
                     PyErr::new::<pyo3::exceptions::PyValueError, _>(
                         "mean is required for monte_carlo method",
@@ -608,8 +760,7 @@ impl PyRiskMetrics {
                 monte_carlo_var(mean, std_dev, num_simulations, confidence_level, seed)
                     .map_err(PyErr::from)?
             }
-            "ewma" | "riskmetrics" | "risk_metrics" | "riskmetric" | "risk_metric"
-            | "risk metrics" => {
+            ParsedRiskMethod::Ewma => {
                 let returns = returns.ok_or_else(|| {
                     PyErr::new::<pyo3::exceptions::PyValueError, _>(
                         "returns array is required for ewma method",
@@ -620,11 +771,15 @@ impl PyRiskMetrics {
                 riskmetrics_var(returns_slice, confidence_level, decay_value)
                     .map_err(PyErr::from)?
             }
-            _ => {
-                return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                    "Invalid method: '{}'. Must be 'historical', 'parametric', 'cornish_fisher', 'monte_carlo', or 'ewma'",
-                    method
-                )));
+            ParsedRiskMethod::Evt => {
+                let returns = returns.ok_or_else(|| {
+                    PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                        "returns array is required for evt method",
+                    )
+                })?;
+                let returns_slice = returns.as_slice()?;
+                let threshold = threshold_quantile.unwrap_or(EVT_DEFAULT_THRESHOLD_QUANTILE);
+                evt_var(returns_slice, confidence_level, threshold).map_err(PyErr::from)?
             }
         };
 
@@ -646,7 +801,7 @@ impl PyRiskMetrics {
     /// confidence_level : float
     ///     Confidence level (e.g., 0.95 for 95%)
     /// method : str, optional
-    ///     CVaR calculation method: 'historical', 'parametric', 'monte_carlo', or 'ewma'
+    ///     CVaR calculation method: 'historical', 'parametric', 'monte_carlo', 'ewma', or 'evt'
     /// mean : float, optional
     ///     Expected return (required for monte_carlo method)
     /// std_dev : float, optional
@@ -657,6 +812,8 @@ impl PyRiskMetrics {
     ///     Random seed for reproducibility (for monte_carlo method)
     /// decay : float, optional
     ///     EWMA decay factor when ``method='ewma'`` (default: 0.94)
+    /// threshold_quantile : float, optional
+    ///     Tail threshold quantile when ``method='evt'`` (default: 0.90)
     ///
     /// Returns
     /// -------
@@ -671,7 +828,7 @@ impl PyRiskMetrics {
     /// >>> result = rm.cvar(returns, 0.95)
     /// >>> print(result['cvar'])
     #[allow(clippy::too_many_arguments)]
-    #[pyo3(signature = (returns=None, confidence_level=0.95, method="historical", mean=None, std_dev=None, num_simulations=10000, seed=None, decay=None))]
+    #[pyo3(signature = (returns=None, confidence_level=0.95, method="historical", mean=None, std_dev=None, num_simulations=10000, seed=None, decay=None, threshold_quantile=None))]
     fn cvar(
         &self,
         py: Python<'_>,
@@ -683,13 +840,13 @@ impl PyRiskMetrics {
         num_simulations: usize,
         seed: Option<u64>,
         decay: Option<f64>,
+        threshold_quantile: Option<f64>,
     ) -> PyResult<Py<PyAny>> {
-        let mut method_key = method.trim().to_lowercase();
-        method_key = method_key.replace('-', "_");
-        method_key = method_key.replace(' ', "_");
+        let method_key = normalize_method_key(method);
+        let resolved_method = resolve_cvar_method(&method_key, method)?;
 
-        let cvar_value = match method_key.as_str() {
-            "historical" => {
+        let cvar_value = match resolved_method {
+            CvarRiskMethod::Historical => {
                 let returns = returns.ok_or_else(|| {
                     PyErr::new::<pyo3::exceptions::PyValueError, _>(
                         "returns array is required for historical method",
@@ -698,7 +855,7 @@ impl PyRiskMetrics {
                 let returns_slice = returns.as_slice()?;
                 historical_cvar(returns_slice, confidence_level).map_err(PyErr::from)?
             }
-            "parametric" => {
+            CvarRiskMethod::Parametric => {
                 let returns = returns.ok_or_else(|| {
                     PyErr::new::<pyo3::exceptions::PyValueError, _>(
                         "returns array is required for parametric method",
@@ -707,7 +864,7 @@ impl PyRiskMetrics {
                 let returns_slice = returns.as_slice()?;
                 parametric_cvar(returns_slice, confidence_level).map_err(PyErr::from)?
             }
-            "monte_carlo" | "montecarlo" | "mc" => {
+            CvarRiskMethod::MonteCarlo => {
                 let mean = mean.ok_or_else(|| {
                     PyErr::new::<pyo3::exceptions::PyValueError, _>(
                         "mean is required for monte_carlo method",
@@ -721,7 +878,7 @@ impl PyRiskMetrics {
                 monte_carlo_cvar(mean, std_dev, num_simulations, confidence_level, seed)
                     .map_err(PyErr::from)?
             }
-            "ewma" | "riskmetrics" | "risk_metrics" | "riskmetric" | "risk_metric" => {
+            CvarRiskMethod::Ewma => {
                 let returns = returns.ok_or_else(|| {
                     PyErr::new::<pyo3::exceptions::PyValueError, _>(
                         "returns array is required for ewma method",
@@ -732,11 +889,15 @@ impl PyRiskMetrics {
                 riskmetrics_cvar(returns_slice, confidence_level, decay_value)
                     .map_err(PyErr::from)?
             }
-            _ => {
-                return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                    "Invalid method: '{}'. Must be 'historical', 'parametric', 'monte_carlo', or 'ewma'",
-                    method
-                )));
+            CvarRiskMethod::Evt => {
+                let returns = returns.ok_or_else(|| {
+                    PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                        "returns array is required for evt method",
+                    )
+                })?;
+                let returns_slice = returns.as_slice()?;
+                let threshold = threshold_quantile.unwrap_or(EVT_DEFAULT_THRESHOLD_QUANTILE);
+                evt_cvar(returns_slice, confidence_level, threshold).map_err(PyErr::from)?
             }
         };
 
@@ -1169,6 +1330,12 @@ pub fn register_module(parent: &Bound<'_, PyModule>) -> PyResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Once;
+
+    fn ensure_python_initialized() {
+        static INIT: Once = Once::new();
+        INIT.call_once(Python::initialize);
+    }
 
     #[test]
     fn test_parse_option_type() {
@@ -1188,5 +1355,130 @@ mod tests {
         assert!(matches!(parse_option_type("Put").unwrap(), OptionType::Put));
         assert!(matches!(parse_option_type("PUT").unwrap(), OptionType::Put));
         assert!(parse_option_type("invalid").is_err());
+    }
+
+    #[test]
+    fn test_normalize_method_key_ascii_and_whitespace() {
+        assert_eq!(normalize_method_key("  RISK-METRICS  "), "risk_metrics");
+        assert_eq!(normalize_method_key("risk\tmetrics"), "risk_metrics");
+        assert_eq!(normalize_method_key("MONTE CARLO"), "monte_carlo");
+        assert_eq!(normalize_method_key("risk__metrics"), "risk_metrics");
+        assert_eq!(normalize_method_key("risk-metrics---"), "risk_metrics");
+    }
+
+    #[test]
+    fn test_normalize_method_key_unicode_fallback() {
+        assert_eq!(normalize_method_key("ÉVT"), "évt");
+        assert_eq!(normalize_method_key("risk metrics"), "risk_metrics");
+        assert_eq!(
+            normalize_method_key("  Extreme  Value   Theory  "),
+            "extreme_value_theory"
+        );
+        assert_eq!(normalize_method_key("risk metrics---"), "risk_metrics");
+        assert_eq!(normalize_method_key("risk\u{00A0}metrics"), "risk_metrics");
+        assert_eq!(normalize_method_key("\u{2003}\u{00A0}-_\t"), "");
+    }
+
+    #[test]
+    fn test_parse_risk_method_aliases() {
+        assert_eq!(
+            parse_risk_method("risk_metric"),
+            Some(ParsedRiskMethod::Ewma)
+        );
+        assert_eq!(
+            parse_risk_method("extreme_value_theory"),
+            Some(ParsedRiskMethod::Evt)
+        );
+        assert_eq!(parse_risk_method("mc"), Some(ParsedRiskMethod::MonteCarlo));
+        assert_eq!(parse_risk_method(""), None);
+    }
+
+    #[test]
+    fn test_resolve_var_method_allows_cornish_fisher() {
+        assert_eq!(
+            resolve_var_method("cornish_fisher", "cornish_fisher").unwrap(),
+            ParsedRiskMethod::CornishFisher
+        );
+    }
+
+    #[test]
+    fn test_resolve_cvar_method_rejects_cornish_fisher() {
+        ensure_python_initialized();
+        let err = resolve_cvar_method("cornish_fisher", "cornish_fisher")
+            .expect_err("cornish_fisher should be invalid for cvar");
+        assert!(err.to_string().contains("Invalid method"));
+    }
+
+    #[test]
+    fn test_resolve_cvar_method_accepts_evt_alias() {
+        assert_eq!(
+            resolve_cvar_method("extreme_value_theory", "extreme_value_theory").unwrap(),
+            CvarRiskMethod::Evt
+        );
+        assert_eq!(
+            resolve_cvar_method("pot", "pot").unwrap(),
+            CvarRiskMethod::Evt
+        );
+    }
+
+    #[test]
+    fn test_resolvers_accept_nbsp_separated_aliases() {
+        let var_key = normalize_method_key("risk\u{00A0}metrics");
+        let cvar_key = normalize_method_key("Extreme\u{00A0}Value\u{00A0}Theory");
+
+        assert_eq!(
+            resolve_var_method(&var_key, "risk\u{00A0}metrics").unwrap(),
+            ParsedRiskMethod::Ewma
+        );
+        assert_eq!(
+            resolve_cvar_method(&cvar_key, "Extreme\u{00A0}Value\u{00A0}Theory").unwrap(),
+            CvarRiskMethod::Evt
+        );
+    }
+    #[test]
+    fn test_resolvers_use_normalized_inputs_for_mixed_case_aliases() {
+        let var_key = normalize_method_key("  RISK-METRICS  ");
+        let cvar_key = normalize_method_key("  PoT  ");
+
+        assert_eq!(
+            resolve_var_method(&var_key, "  RISK-METRICS  ").unwrap(),
+            ParsedRiskMethod::Ewma
+        );
+        assert_eq!(
+            resolve_cvar_method(&cvar_key, "  PoT  ").unwrap(),
+            CvarRiskMethod::Evt
+        );
+        assert_eq!(
+            resolve_var_method(&normalize_method_key(" Mc "), " Mc ").unwrap(),
+            ParsedRiskMethod::MonteCarlo
+        );
+    }
+
+    #[test]
+    fn test_resolve_method_error_hints_are_scoped() {
+        ensure_python_initialized();
+        let var_err = resolve_var_method("unknown", "unknown").expect_err("should reject");
+        let cvar_err = resolve_cvar_method("cornish_fisher", "cornish_fisher")
+            .expect_err("cvar should reject cornish_fisher");
+
+        let var_message = var_err.to_string();
+        let cvar_message = cvar_err.to_string();
+
+        assert!(var_message.contains(VAR_METHODS_ERROR_HINT));
+        assert!(cvar_message.contains(CVAR_METHODS_ERROR_HINT));
+        assert!(!cvar_message.contains("'cornish_fisher',"));
+    }
+
+    #[test]
+    fn test_separator_only_method_is_rejected_after_normalization() {
+        let normalized_ascii = normalize_method_key("  --- ___ \t\n  ");
+        assert!(normalized_ascii.is_empty());
+        assert!(resolve_var_method(&normalized_ascii, "---").is_err());
+        assert!(resolve_cvar_method(&normalized_ascii, "---").is_err());
+
+        let normalized_unicode = normalize_method_key("\u{2003}\u{00A0}-_\t");
+        assert!(normalized_unicode.is_empty());
+        assert!(resolve_var_method(&normalized_unicode, "\u{2003}\u{00A0}-_\t").is_err());
+        assert!(resolve_cvar_method(&normalized_unicode, "\u{2003}\u{00A0}-_\t").is_err());
     }
 }

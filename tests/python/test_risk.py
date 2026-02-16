@@ -109,8 +109,18 @@ class TestVaRCalculations:
 
         baseline = rm.var(returns, method="ewma", decay=0.94)
         alias = rm.var(returns, method="risk metrics", decay=0.94)
+        hyphen_alias = rm.var(returns, method="RISK-METRICS", decay=0.94)
+        whitespace_alias = rm.var(returns, method="risk	metrics", decay=0.94)
+        condensed_alias = rm.var(returns, method="risk---metrics", decay=0.94)
+        underscore_alias = rm.var(returns, method="risk__metrics", decay=0.94)
+        nbsp_alias = rm.var(returns, method="risk metrics", decay=0.94)
 
         assert math.isclose(baseline["var"], alias["var"])
+        assert math.isclose(baseline["var"], hyphen_alias["var"])
+        assert math.isclose(baseline["var"], whitespace_alias["var"])
+        assert math.isclose(baseline["var"], condensed_alias["var"])
+        assert math.isclose(baseline["var"], underscore_alias["var"])
+        assert math.isclose(baseline["var"], nbsp_alias["var"])
 
     def test_ewma_var_invalid_decay(self):
         """EWMA should validate decay factor bounds"""
@@ -121,6 +131,60 @@ class TestVaRCalculations:
             rm.var(returns, method="ewma", decay=1.0)
         with pytest.raises(Exception):
             rm.var(returns, method="ewma", decay=-0.05)
+
+    def test_evt_var_and_alias(self):
+        """EVT VaR should produce a positive tail estimate and accept aliases."""
+        rm = RiskMetrics()
+        rng = np.random.default_rng(123)
+        returns = rng.standard_t(df=4, size=5000) * 0.012
+
+        evt = rm.var(returns, confidence_level=0.99, method="evt", threshold_quantile=0.9)
+        alias = rm.var(
+            returns,
+            confidence_level=0.99,
+            method="extreme_value_theory",
+            threshold_quantile=0.9,
+        )
+        alias_hyphen = rm.var(
+            returns,
+            confidence_level=0.99,
+            method="EXTREME-VALUE-THEORY",
+            threshold_quantile=0.9,
+        )
+        alias_unicode_space = rm.var(
+            returns,
+            confidence_level=0.99,
+            method="Extreme\u00a0Value\u00a0Theory",
+            threshold_quantile=0.9,
+        )
+        hist = rm.var(returns, confidence_level=0.99, method="historical")
+
+        assert evt["var"] > 0.0
+        assert math.isclose(evt["var"], alias["var"], rel_tol=1e-9, abs_tol=1e-12)
+        assert math.isclose(evt["var"], alias_hyphen["var"], rel_tol=1e-9, abs_tol=1e-12)
+        assert math.isclose(evt["var"], alias_unicode_space["var"], rel_tol=1e-9, abs_tol=1e-12)
+        assert evt["var"] >= 0.8 * hist["var"]
+
+    def test_evt_var_invalid_threshold(self):
+        """EVT VaR should validate threshold quantiles."""
+        rm = RiskMetrics()
+        returns = np.random.default_rng(0).normal(0.0, 0.02, 1000)
+
+        with pytest.raises(Exception):
+            rm.var(returns, confidence_level=0.99, method="evt", threshold_quantile=1.0)
+        with pytest.raises(Exception):
+            rm.var(returns, confidence_level=0.99, method="evt", threshold_quantile=-0.1)
+
+    def test_evt_all_positive_returns(self):
+        """EVT should return zero tail risk for strictly positive return series."""
+        rm = RiskMetrics()
+        returns = np.linspace(0.0001, 0.002, 200)
+
+        var_evt = rm.var(returns, confidence_level=0.99, method="evt", threshold_quantile=0.9)
+        cvar_evt = rm.cvar(returns, confidence_level=0.99, method="evt", threshold_quantile=0.9)
+
+        assert var_evt["var"] == 0.0
+        assert cvar_evt["cvar"] == 0.0
 
     def test_var_comparison_methods(self):
         """Compare VaR across different methods"""
@@ -152,6 +216,21 @@ class TestVaRCalculations:
         # Higher confidence level should give higher VaR
         assert var_90["var"] < var_95["var"]
         assert var_95["var"] < var_99["var"]
+
+    def test_method_with_only_separators_is_invalid(self):
+        """Separator-only method names should be rejected after normalization."""
+        rm = RiskMetrics()
+        returns = np.array([0.01, -0.01, 0.02, -0.02])
+
+        with pytest.raises(Exception):
+            rm.var(returns, method="---	  ")
+        with pytest.raises(Exception):
+            rm.cvar(returns, method="---	  ")
+
+        with pytest.raises(Exception):
+            rm.var(returns, method="\u2003\u00a0-_\t")
+        with pytest.raises(Exception):
+            rm.cvar(returns, method="\u2003\u00a0-_\t")
 
     def test_var_invalid_inputs(self):
         """Test VaR with invalid inputs"""
@@ -266,13 +345,85 @@ class TestCVaRCalculations:
 
         baseline = rm.cvar(returns, method="ewma", decay=0.9)
         alias = rm.cvar(returns, method="risk metrics", decay=0.9)
+        hyphen_alias = rm.cvar(returns, method="RISK-METRICS", decay=0.9)
+        whitespace_alias = rm.cvar(returns, method="risk	metrics", decay=0.9)
+        condensed_alias = rm.cvar(returns, method="risk---metrics", decay=0.9)
+        underscore_alias = rm.cvar(returns, method="risk__metrics", decay=0.9)
+        nbsp_alias = rm.cvar(returns, method="risk metrics", decay=0.9)
 
         assert math.isclose(baseline["cvar"], alias["cvar"])
+        assert math.isclose(baseline["cvar"], hyphen_alias["cvar"])
+        assert math.isclose(baseline["cvar"], whitespace_alias["cvar"])
+        assert math.isclose(baseline["cvar"], condensed_alias["cvar"])
+        assert math.isclose(baseline["cvar"], underscore_alias["cvar"])
+        assert math.isclose(baseline["cvar"], nbsp_alias["cvar"])
 
         with pytest.raises(Exception):
             rm.cvar(returns, method="ewma", decay=1.0)
         with pytest.raises(Exception):
             rm.cvar(returns, method="ewma", decay=-0.05)
+
+    def test_evt_cvar_greater_than_evt_var(self):
+        """EVT CVaR must be at least EVT VaR."""
+        rm = RiskMetrics()
+        rng = np.random.default_rng(456)
+        returns = rng.standard_t(df=5, size=6000) * 0.01
+
+        var_evt = rm.var(returns, confidence_level=0.99, method="evt", threshold_quantile=0.9)
+        cvar_evt = rm.cvar(returns, confidence_level=0.99, method="evt", threshold_quantile=0.9)
+
+        assert cvar_evt["cvar"] >= var_evt["var"]
+
+    def test_evt_cvar_alias_normalization(self):
+        """EVT CVaR aliases should be case/format insensitive."""
+        rm = RiskMetrics()
+        rng = np.random.default_rng(987)
+        returns = rng.standard_t(df=6, size=4000) * 0.011
+
+        baseline = rm.cvar(returns, confidence_level=0.99, method="evt", threshold_quantile=0.9)
+        alias = rm.cvar(
+            returns,
+            confidence_level=0.99,
+            method="Extreme Value Theory",
+            threshold_quantile=0.9,
+        )
+        hyphen_alias = rm.cvar(
+            returns,
+            confidence_level=0.99,
+            method="EXTREME-VALUE-THEORY",
+            threshold_quantile=0.9,
+        )
+        whitespace_alias = rm.cvar(
+            returns,
+            confidence_level=0.99,
+            method="Extreme	Value Theory",
+            threshold_quantile=0.9,
+        )
+        condensed_alias = rm.cvar(
+            returns,
+            confidence_level=0.99,
+            method="Extreme---Value   Theory",
+            threshold_quantile=0.9,
+        )
+        underscore_alias = rm.cvar(
+            returns,
+            confidence_level=0.99,
+            method="Extreme__Value__Theory",
+            threshold_quantile=0.9,
+        )
+        nbsp_alias = rm.cvar(
+            returns,
+            confidence_level=0.99,
+            method="Extreme Value Theory",
+            threshold_quantile=0.9,
+        )
+
+        assert math.isclose(baseline["cvar"], alias["cvar"], rel_tol=1e-9, abs_tol=1e-12)
+        assert math.isclose(baseline["cvar"], hyphen_alias["cvar"], rel_tol=1e-9, abs_tol=1e-12)
+        assert math.isclose(baseline["cvar"], whitespace_alias["cvar"], rel_tol=1e-9, abs_tol=1e-12)
+        assert math.isclose(baseline["cvar"], condensed_alias["cvar"], rel_tol=1e-9, abs_tol=1e-12)
+        assert math.isclose(baseline["cvar"], underscore_alias["cvar"], rel_tol=1e-9, abs_tol=1e-12)
+        assert math.isclose(baseline["cvar"], nbsp_alias["cvar"], rel_tol=1e-9, abs_tol=1e-12)
 
 
 class TestRiskMetrics:

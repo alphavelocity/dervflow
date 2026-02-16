@@ -30,6 +30,8 @@ pub enum VaRMethod {
     MonteCarlo,
     /// Exponentially weighted moving average
     Ewma,
+    /// Extreme Value Theory using Peaks-Over-Threshold and GPD tail fit
+    ExtremeValueTheory,
 }
 
 /// Result of a VaR calculation
@@ -350,6 +352,123 @@ pub fn riskmetrics_cvar(returns: &[f64], confidence_level: f64, decay: f64) -> R
     Ok(cvar.max(var).max(0.0))
 }
 
+#[derive(Debug, Clone, Copy)]
+struct PreparedEvt {
+    fit: EvtTailFit,
+    alpha: f64,
+}
+
+/// Calculate Value at Risk using Extreme Value Theory (Peaks-Over-Threshold).
+///
+/// This estimator focuses on tail losses above a high loss threshold and fits a
+/// Generalized Pareto Distribution (GPD) to the exceedances.
+///
+/// # Arguments
+/// * `returns` - Historical returns data (negative values are losses)
+/// * `confidence_level` - Tail confidence level (e.g., 0.99 for 99%)
+/// * `threshold_quantile` - Loss threshold quantile used for POT in (0, 1)
+pub fn evt_var(returns: &[f64], confidence_level: f64, threshold_quantile: f64) -> Result<f64> {
+    let prepared = prepare_evt_tail(returns, confidence_level, threshold_quantile)?;
+
+    if let Some(prepared) = prepared {
+        let var = evt_var_from_fit(&prepared.fit, prepared.alpha)?;
+
+        Ok(var.max(0.0))
+    } else {
+        historical_var(returns, confidence_level)
+    }
+}
+
+/// Calculate Conditional VaR using Extreme Value Theory (Peaks-Over-Threshold).
+///
+/// CVaR is calculated from the fitted GPD tail. For shape parameters near one,
+/// the estimate can become unstable/infinite and an error is returned.
+pub fn evt_cvar(returns: &[f64], confidence_level: f64, threshold_quantile: f64) -> Result<f64> {
+    let prepared = prepare_evt_tail(returns, confidence_level, threshold_quantile)?;
+
+    if let Some(prepared) = prepared {
+        if prepared.fit.shape >= 1.0 {
+            return Err(DervflowError::NumericalError(
+                "EVT CVaR undefined for shape parameter >= 1".to_string(),
+            ));
+        }
+
+        let var = evt_var_from_fit(&prepared.fit, prepared.alpha)?;
+        let conditional_excess = (prepared.fit.scale
+            + prepared.fit.shape * (var - prepared.fit.threshold_loss))
+            / (1.0 - prepared.fit.shape);
+        let cvar = var + conditional_excess;
+
+        if !cvar.is_finite() {
+            return Err(DervflowError::NumericalError(
+                "EVT CVaR computation produced non-finite value".to_string(),
+            ));
+        }
+
+        Ok(cvar.max(var).max(0.0))
+    } else {
+        historical_cvar(returns, confidence_level)
+    }
+}
+
+fn prepare_evt_tail(
+    returns: &[f64],
+    confidence_level: f64,
+    threshold_quantile: f64,
+) -> Result<Option<PreparedEvt>> {
+    validate_confidence_level(confidence_level)?;
+
+    let fit = fit_evt_tail(returns, threshold_quantile)?;
+    let alpha = 1.0 - confidence_level;
+
+    if alpha >= fit.tail_probability {
+        return Ok(None);
+    }
+
+    Ok(Some(PreparedEvt { fit, alpha }))
+}
+
+fn evt_var_from_fit(fit: &EvtTailFit, alpha: f64) -> Result<f64> {
+    if alpha <= 0.0 || !alpha.is_finite() {
+        return Err(DervflowError::NumericalError(
+            "Invalid EVT alpha state".to_string(),
+        ));
+    }
+
+    if fit.tail_probability <= 0.0
+        || !fit.tail_probability.is_finite()
+        || !fit.threshold_loss.is_finite()
+        || !fit.shape.is_finite()
+        || !fit.scale.is_finite()
+        || fit.scale < 0.0
+    {
+        return Err(DervflowError::NumericalError(
+            "Invalid EVT tail fit state".to_string(),
+        ));
+    }
+
+    let tail_ratio = fit.tail_probability / alpha;
+    if tail_ratio <= 0.0 || !tail_ratio.is_finite() {
+        return Err(DervflowError::NumericalError(
+            "Invalid EVT tail ratio state".to_string(),
+        ));
+    }
+
+    let var = if fit.shape.abs() < 1e-10 {
+        fit.threshold_loss + fit.scale * tail_ratio.ln()
+    } else {
+        fit.threshold_loss + (fit.scale / fit.shape) * (tail_ratio.powf(fit.shape) - 1.0)
+    };
+
+    if !var.is_finite() {
+        return Err(DervflowError::NumericalError(
+            "EVT VaR extrapolation produced non-finite value".to_string(),
+        ));
+    }
+
+    Ok(var)
+}
+
 fn validate_confidence_level(confidence_level: f64) -> Result<()> {
     if confidence_level <= 0.0 || confidence_level >= 1.0 {
         return Err(DervflowError::InvalidInput(format!(
@@ -471,6 +590,101 @@ fn compute_ewma_sigma(returns: &[f64], decay: f64) -> Result<f64> {
     }
 
     Ok(variance.sqrt())
+}
+
+#[derive(Debug, Clone, Copy)]
+struct EvtTailFit {
+    threshold_loss: f64,
+    tail_probability: f64,
+    shape: f64,
+    scale: f64,
+}
+
+fn fit_evt_tail(returns: &[f64], threshold_quantile: f64) -> Result<EvtTailFit> {
+    if returns.len() < 20 {
+        return Err(DervflowError::InvalidInput(
+            "At least 20 observations are required for EVT estimation".to_string(),
+        ));
+    }
+
+    if !returns.iter().all(|value| value.is_finite()) {
+        return Err(DervflowError::InvalidInput(
+            "Returns must contain only finite values".to_string(),
+        ));
+    }
+
+    if !(0.0..1.0).contains(&threshold_quantile) {
+        return Err(DervflowError::InvalidInput(format!(
+            "Threshold quantile must be in (0, 1), got {}",
+            threshold_quantile
+        )));
+    }
+
+    let mut losses: Vec<f64> = returns.iter().map(|&r| (-r).max(0.0)).collect();
+    let threshold_index = ((threshold_quantile * losses.len() as f64).floor() as usize)
+        .min(losses.len().saturating_sub(1));
+    losses.select_nth_unstable_by(threshold_index, |a, b| a.total_cmp(b));
+    let threshold_loss = losses[threshold_index];
+
+    let mut count = 0usize;
+    let mut sum = 0.0;
+    let mut sum_sq = 0.0;
+
+    for &loss in &losses {
+        let excess = loss - threshold_loss;
+        if excess > 0.0 {
+            count += 1;
+            sum += excess;
+            sum_sq += excess * excess;
+        }
+    }
+
+    if count == 0 {
+        return Ok(EvtTailFit {
+            threshold_loss,
+            tail_probability: 0.0,
+            shape: 0.0,
+            scale: 0.0,
+        });
+    }
+
+    if count < 10 {
+        return Err(DervflowError::InvalidInput(
+            "Not enough tail exceedances for EVT fit; lower threshold quantile".to_string(),
+        ));
+    }
+
+    let count_f64 = count as f64;
+    let m1 = sum / count_f64;
+    let m2 = (sum_sq - (sum * sum) / count_f64) / (count_f64 - 1.0);
+
+    if m1 <= 0.0 || !m1.is_finite() || !m2.is_finite() {
+        return Err(DervflowError::NumericalError(
+            "Failed to compute EVT exceedance moments".to_string(),
+        ));
+    }
+
+    let tail_probability = count_f64 / losses.len() as f64;
+
+    if m2 <= f64::EPSILON {
+        return Ok(EvtTailFit {
+            threshold_loss,
+            tail_probability,
+            shape: 0.0,
+            scale: m1.max(1e-12),
+        });
+    }
+
+    let moment_ratio = m1 * m1 / m2;
+    let shape = ((1.0 - moment_ratio) / 2.0).clamp(-0.45, 0.45);
+    let scale = (m1 * (1.0 - shape)).max(1e-12);
+
+    Ok(EvtTailFit {
+        threshold_loss,
+        tail_probability,
+        shape,
+        scale,
+    })
 }
 
 /// Inverse normal cumulative distribution function (quantile function)
@@ -670,6 +884,85 @@ mod tests {
         assert!(riskmetrics_cvar(&returns, 0.95, 1.0).is_err());
         assert!(riskmetrics_cvar(&returns, 0.0, 0.94).is_err());
         assert!(riskmetrics_cvar(&[], 0.95, 0.94).is_err());
+    }
+
+    #[test]
+    fn test_evt_var_and_cvar() {
+        let returns: Vec<f64> = (0..4000)
+            .map(|i| {
+                let x = (i as f64 + 1.0) / 4001.0;
+                let tail = ((1.0 - x).max(1e-6)).powf(-0.3) - 1.0;
+                let sign = if i % 2 == 0 { -1.0 } else { 1.0 };
+                sign * 0.004 * tail
+            })
+            .collect();
+
+        let var = evt_var(&returns, 0.99, 0.9).unwrap();
+        let cvar = evt_cvar(&returns, 0.99, 0.9).unwrap();
+
+        assert!(var > 0.0);
+        assert!(cvar >= var);
+    }
+
+    #[test]
+    fn test_evt_invalid_threshold_quantile() {
+        let returns = vec![0.01; 100];
+        assert!(evt_var(&returns, 0.99, 1.0).is_err());
+        assert!(evt_var(&returns, 0.99, -0.2).is_err());
+    }
+
+    #[test]
+    fn test_evt_var_rejects_non_finite_inputs() {
+        let returns = vec![
+            0.01,
+            -0.02,
+            f64::NAN,
+            0.015,
+            -0.01,
+            0.005,
+            -0.005,
+            0.01,
+            -0.008,
+            0.003,
+            -0.002,
+            0.004,
+            -0.006,
+            0.007,
+            -0.009,
+            0.011,
+            -0.012,
+            0.013,
+            -0.014,
+            0.015,
+        ];
+        assert!(evt_var(&returns, 0.99, 0.9).is_err());
+        assert!(evt_cvar(&returns, 0.99, 0.9).is_err());
+    }
+
+    #[test]
+    fn test_evt_handles_low_tail_variance_exceedances() {
+        let mut returns = vec![0.001; 200];
+        returns.extend(vec![-0.01; 20]);
+
+        let var = evt_var(&returns, 0.99, 0.9).unwrap();
+        let cvar = evt_cvar(&returns, 0.99, 0.9).unwrap();
+
+        assert!(var >= 0.0);
+        assert!(cvar >= var);
+    }
+
+    #[test]
+    fn test_evt_all_positive_returns_collapses_to_zero_tail_risk() {
+        let returns = vec![
+            0.001, 0.002, 0.0005, 0.0015, 0.0008, 0.0012, 0.0011, 0.0007, 0.0013, 0.0009, 0.0014,
+            0.0010, 0.0006, 0.0016, 0.0004, 0.0017, 0.0003, 0.0018, 0.0002, 0.0019, 0.0001, 0.0020,
+        ];
+
+        let var = evt_var(&returns, 0.99, 0.9).unwrap();
+        let cvar = evt_cvar(&returns, 0.99, 0.9).unwrap();
+
+        assert_eq!(var, 0.0);
+        assert_eq!(cvar, 0.0);
     }
 
     #[test]
