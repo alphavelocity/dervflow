@@ -218,7 +218,7 @@ impl PyYieldCurve {
 }
 
 /// Swap period helper for Python interoperability
-#[pyclass(name = "SwapPeriod")]
+#[pyclass(name = "SwapPeriod", skip_from_py_object)]
 #[derive(Clone, Copy)]
 pub struct PySwapPeriod {
     period: CoreSwapPeriod,

@@ -20,7 +20,8 @@ thread_local! {
 
 /// Create a `StdRng` backed by system entropy
 fn new_entropy_rng() -> StdRng {
-    StdRng::from_os_rng()
+    let mut entropy = rand::rng();
+    StdRng::from_rng(&mut entropy)
 }
 
 /// Random number generator with normal distribution sampling

@@ -1,6 +1,6 @@
 [package]
 name = "dervflow"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 authors = ["Soumyadip Sarkar"]
 description = "A Lightweight, High-Performance Mathematics & Quantitative Finance Toolkit"
@@ -39,15 +39,15 @@ monte_carlo = ["numerical"]
 
 [dependencies]
 # PyO3 for Python bindings
-pyo3 = { version = "0.27", features = ["abi3-py310"], optional = true }
-numpy = { version = "0.27", optional = true }
+pyo3 = { version = "0.28", features = ["abi3-py310"], optional = true }
+numpy = { version = "0.28", optional = true }
 
 # Numerical computing
 nalgebra = { version = "0.34", features = ["serde-serialize"] }
 ndarray = { version = "0.17", features = ["rayon", "serde"] }
-rand = "0.9"
-rand_distr = "0.5"
-rand_chacha = "0.9"
+rand = "0.10"
+rand_distr = "0.6"
+rand_chacha = "0.10"
 statrs = "0.18"
 
 # Parallel processing
@@ -74,7 +74,7 @@ anyhow = "1.0"
 log = { version = "0.4", optional = true }
 
 [build-dependencies]
-pyo3-build-config = { version = "0.27", features = ["resolve-config"] }
+pyo3-build-config = { version = "0.28", features = ["resolve-config"] }
 
 [dev-dependencies]
 proptest = "1.5"
