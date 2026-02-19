@@ -13,6 +13,11 @@ use super::validation::{
 
 const DEFAULT_MAD_SCALE: f64 = 1.482_602_218_505_602; // Consistent with normal distribution MAD.
 
+#[inline]
+fn stable_lerp(lower: f64, upper: f64, weight: f64) -> f64 {
+    lower * (1.0 - weight) + upper * weight
+}
+
 pub fn mean(data: &[f64]) -> Result<f64> {
     validate_non_empty(data, "mean")?;
     validate_finite(data, "mean")?;
@@ -207,14 +212,18 @@ pub fn median(data: &[f64]) -> Result<f64> {
     validate_non_empty(data, "median")?;
     validate_finite(data, "median")?;
 
-    let mut sorted = data.to_vec();
-    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    let mut values = data.to_vec();
+    let upper_mid = values.len() / 2;
 
-    let mid = sorted.len() / 2;
-    if sorted.len() % 2 == 0 {
-        Ok((sorted[mid - 1] + sorted[mid]) / 2.0)
+    if values.len() % 2 == 1 {
+        let (_, median_value, _) = values.select_nth_unstable_by(upper_mid, f64::total_cmp);
+        Ok(*median_value)
     } else {
-        Ok(sorted[mid])
+        let (lower_partition, upper_value, _) =
+            values.select_nth_unstable_by(upper_mid, f64::total_cmp);
+        let (_, lower_value, _) =
+            lower_partition.select_nth_unstable_by(upper_mid - 1, f64::total_cmp);
+        Ok(stable_lerp(*lower_value, *upper_value, 0.5))
     }
 }
 
@@ -228,20 +237,21 @@ pub fn percentile(data: &[f64], percentile: f64) -> Result<f64> {
         ));
     }
 
-    let mut sorted = data.to_vec();
-    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
-
-    let position = percentile * ((sorted.len() - 1) as f64);
+    let mut values = data.to_vec();
+    let position = percentile * ((values.len() - 1) as f64);
     let lower_index = position.floor() as usize;
     let upper_index = position.ceil() as usize;
 
     if lower_index == upper_index {
-        Ok(sorted[lower_index])
+        let (_, percentile_value, _) = values.select_nth_unstable_by(lower_index, f64::total_cmp);
+        Ok(*percentile_value)
     } else {
-        let lower_value = sorted[lower_index];
-        let upper_value = sorted[upper_index];
+        let (lower_partition, upper_value, _) =
+            values.select_nth_unstable_by(upper_index, f64::total_cmp);
+        let (_, lower_value, _) =
+            lower_partition.select_nth_unstable_by(lower_index, f64::total_cmp);
         let weight = position - lower_index as f64;
-        Ok(lower_value + weight * (upper_value - lower_value))
+        Ok(stable_lerp(*lower_value, *upper_value, weight))
     }
 }
 
@@ -384,6 +394,22 @@ mod tests {
     use super::*;
     use approx::{assert_abs_diff_eq, assert_relative_eq};
 
+    fn percentile_reference(data: &[f64], percentile: f64) -> f64 {
+        let mut sorted = data.to_vec();
+        sorted.sort_unstable_by(f64::total_cmp);
+
+        let position = percentile * ((sorted.len() - 1) as f64);
+        let lower_index = position.floor() as usize;
+        let upper_index = position.ceil() as usize;
+
+        if lower_index == upper_index {
+            sorted[lower_index]
+        } else {
+            let weight = position - lower_index as f64;
+            sorted[lower_index] * (1.0 - weight) + sorted[upper_index] * weight
+        }
+    }
+
     #[test]
     fn test_mean_variants() {
         let data = [1.0, 2.0, 3.0, 4.0];
@@ -456,6 +482,91 @@ mod tests {
         assert_abs_diff_eq!(percentile(&data, 0.5).unwrap(), 3.0, epsilon = 1e-12);
         assert_abs_diff_eq!(percentile(&data, 1.0).unwrap(), 5.0, epsilon = 1e-12);
         assert_abs_diff_eq!(interquartile_range(&data).unwrap(), 2.0, epsilon = 1e-12);
+
+        let signed_zero = [-0.0, 0.0, 1.0, -1.0];
+        assert_abs_diff_eq!(median(&signed_zero).unwrap(), 0.0, epsilon = 1e-12);
+
+        let with_duplicates = [5.0, 3.0, 3.0, 2.0, 9.0, 8.0, 8.0, 1.0];
+        assert_abs_diff_eq!(median(&with_duplicates).unwrap(), 4.0, epsilon = 1e-12);
+        assert_abs_diff_eq!(
+            percentile(&with_duplicates, 0.25).unwrap(),
+            2.75,
+            epsilon = 1e-12
+        );
+        assert_abs_diff_eq!(
+            percentile(&with_duplicates, 0.75).unwrap(),
+            8.0,
+            epsilon = 1e-12
+        );
+
+        let single = [42.0];
+        assert_abs_diff_eq!(median(&single).unwrap(), 42.0, epsilon = 1e-12);
+        assert_abs_diff_eq!(percentile(&single, 0.0).unwrap(), 42.0, epsilon = 1e-12);
+        assert_abs_diff_eq!(percentile(&single, 1.0).unwrap(), 42.0, epsilon = 1e-12);
+
+        let extreme_pair = [-1.0e308, 1.0e308];
+        assert_abs_diff_eq!(median(&extreme_pair).unwrap(), 0.0, epsilon = 1e-12);
+        assert_abs_diff_eq!(
+            percentile(&extreme_pair, 0.5).unwrap(),
+            0.0,
+            epsilon = 1e-12
+        );
+        assert_abs_diff_eq!(
+            percentile(&extreme_pair, 0.25).unwrap(),
+            -5.0e307,
+            epsilon = 1.0e292
+        );
+        assert_abs_diff_eq!(
+            percentile(&extreme_pair, 0.75).unwrap(),
+            5.0e307,
+            epsilon = 1.0e292
+        );
+    }
+
+    #[test]
+    fn test_percentile_invariants_monotonic_and_bounded() {
+        let datasets = [
+            vec![-1.0e308, -3.0, -3.0, 0.0, 4.0, 9.0, 1.0e308],
+            vec![42.0, 42.0, 42.0, 42.0],
+            vec![-5.0, -1.0, 0.0, 2.0, 8.0],
+        ];
+
+        for data in datasets {
+            let min = data.iter().copied().fold(f64::INFINITY, f64::min);
+            let max = data.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+
+            let mut prev = percentile(&data, 0.0).unwrap();
+            assert!(prev >= min - 1e-12 && prev <= max + 1e-12);
+
+            for step in 1..=100 {
+                let q = step as f64 / 100.0;
+                let current = percentile(&data, q).unwrap();
+                assert!(current >= min - 1e-10 && current <= max + 1e-10);
+                assert!(current + 1e-10 >= prev);
+                prev = current;
+            }
+        }
+    }
+
+    #[test]
+    fn test_percentile_matches_sorted_reference_across_samples() {
+        let mut state = 0x9E37_79B9_7F4A_7C15u64;
+        let quantiles = [0.0, 0.01, 0.1, 0.25, 0.5, 0.73, 0.9, 0.99, 1.0];
+
+        for len in 2..=64 {
+            let mut data = Vec::with_capacity(len);
+            for _ in 0..len {
+                state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
+                let centered = ((state >> 11) as f64 / ((1u64 << 53) as f64) - 0.5) * 1.0e6;
+                data.push(centered);
+            }
+
+            for &q in &quantiles {
+                let observed = percentile(&data, q).unwrap();
+                let expected = percentile_reference(&data, q);
+                assert_abs_diff_eq!(observed, expected, epsilon = 1e-12);
+            }
+        }
     }
 
     #[test]
