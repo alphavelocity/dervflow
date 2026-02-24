@@ -1,5 +1,5 @@
 DervFlow Documentation
-=====================
+======================
 
 Welcome to the DervFlow documentation portal. DervFlow is a quantitative finance
 library implemented in Rust with first-class Python bindings. It provides
@@ -105,7 +105,6 @@ Contents
    :maxdepth: 2
    :caption: API Reference
 
-   api/complete_reference
    api/options
    api/risk
    api/portfolio

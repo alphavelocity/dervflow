@@ -82,7 +82,7 @@ contributions and parametric VaR/CVaR estimates.
 See Also
 --------
 
-* :doc:`../user_guide/risk_management` – comprehensive walkthroughs of risk
+* :doc:`../user_guide/risk_analytics` - comprehensive walkthroughs of risk
   workflows
-* :doc:`../theory/stochastic_processes` – mathematical background on stochastic
+* :doc:`../theory/stochastic_processes` - mathematical background on stochastic
   calculus and risk measures

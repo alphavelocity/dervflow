@@ -135,7 +135,7 @@ For more advanced examples and tutorials, see the Jupyter notebooks in the `exam
 - `02_volatility_surface.ipynb` - Volatility surface construction and calibration
 - `03_portfolio_optimization.ipynb` - Advanced portfolio optimization
 - `04_yield_curves.ipynb` - Yield curve construction and bond analytics
-- `05_monte_carlo.ipynb` - Monte Carlo simulation examples
+- `05_monte_carlo_simulation.ipynb` - Monte Carlo simulation examples
 - `06_risk_analysis.ipynb` - Comprehensive risk analysis
 
 ## Getting Help

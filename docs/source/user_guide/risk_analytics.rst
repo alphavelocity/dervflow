@@ -176,6 +176,6 @@ DervFlow also exposes helper stat metrics for analysing return streams.
 Next Steps
 ----------
 
-* :doc:`../api/risk` – API reference for the risk module.
-* :doc:`../theory/risk_models` – Mathematical background for the implemented
+* :doc:`../api/risk` - API reference for the risk module.
+* :doc:`../theory/var` - Mathematical background for the implemented
   risk measures.

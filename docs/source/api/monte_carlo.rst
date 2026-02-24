@@ -10,19 +10,7 @@ MonteCarloEngine
 ----------------
 
 .. autoclass:: MonteCarloEngine
-   :members:
-   :undoc-members:
    :show-inheritance:
-
-Key Simulation Methods
-----------------------
-
-.. automethod:: MonteCarloEngine.simulate_gbm
-.. automethod:: MonteCarloEngine.simulate_ou
-.. automethod:: MonteCarloEngine.simulate_cir
-.. automethod:: MonteCarloEngine.simulate_vasicek
-.. automethod:: MonteCarloEngine.simulate_jump_diffusion
-.. automethod:: MonteCarloEngine.simulate_correlated
 
 Usage Notes
 -----------
@@ -57,7 +45,7 @@ Geometric Brownian Motion
    )
 
    plt.figure(figsize=(12, 6))
-   plt.plot(paths[:, :10])
+   plt.plot(paths[:10].T)
    plt.xlabel("Time Steps")
    plt.ylabel("Price")
    plt.title("Geometric Brownian Motion Paths")
@@ -100,7 +88,7 @@ Correlated Multi-Asset Simulation
    )
 
    print(len(correlated_paths))  # -> 3 assets
-   print(correlated_paths[0].shape)  # (5000, 252)
+   print(correlated_paths[0].shape)  # (5000, 253)
 
 Option Pricing with Monte Carlo
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -28,7 +28,7 @@ Exception Types
 ---------------
 
 DervflowError
-~~~~~~~~~~
+~~~~~~~~~~~~~
 
 .. class:: dervflow.DervflowError
 
