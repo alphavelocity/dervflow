@@ -356,13 +356,17 @@ impl PyGreeksCalculator {
 
 /// Parse option type string to OptionType enum
 fn parse_option_type(s: &str) -> PyResult<OptionType> {
-    match s.to_lowercase().as_str() {
-        "call" => Ok(OptionType::Call),
-        "put" => Ok(OptionType::Put),
-        _ => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+    let normalized = s.trim();
+
+    if normalized.eq_ignore_ascii_case("call") {
+        Ok(OptionType::Call)
+    } else if normalized.eq_ignore_ascii_case("put") {
+        Ok(OptionType::Put)
+    } else {
+        Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
             "Invalid option type: '{}'. Must be 'call' or 'put'",
             s
-        ))),
+        )))
     }
 }
 
@@ -1354,7 +1358,16 @@ mod tests {
         assert!(matches!(parse_option_type("put").unwrap(), OptionType::Put));
         assert!(matches!(parse_option_type("Put").unwrap(), OptionType::Put));
         assert!(matches!(parse_option_type("PUT").unwrap(), OptionType::Put));
+        assert!(matches!(
+            parse_option_type("  call\n").unwrap(),
+            OptionType::Call
+        ));
+        assert!(matches!(
+            parse_option_type("\tPut  ").unwrap(),
+            OptionType::Put
+        ));
         assert!(parse_option_type("invalid").is_err());
+        assert!(parse_option_type("call option").is_err());
     }
 
     #[test]

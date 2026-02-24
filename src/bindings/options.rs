@@ -498,37 +498,57 @@ impl PyBlackScholesModel {
 
 /// Parse option type string to OptionType enum
 fn parse_option_type(s: &str) -> PyResult<OptionType> {
-    match s.to_lowercase().as_str() {
-        "call" => Ok(OptionType::Call),
-        "put" => Ok(OptionType::Put),
-        _ => Err(PyValueError::new_err(format!(
+    let normalized = s.trim();
+
+    if normalized.eq_ignore_ascii_case("call") {
+        Ok(OptionType::Call)
+    } else if normalized.eq_ignore_ascii_case("put") {
+        Ok(OptionType::Put)
+    } else {
+        Err(PyValueError::new_err(format!(
             "Invalid option type '{}'. Must be 'call' or 'put'",
             s
-        ))),
+        )))
     }
 }
 
 /// Parse exercise style string to ExerciseStyle enum
 fn parse_exercise_style(s: &str) -> PyResult<ExerciseStyle> {
-    match s.to_lowercase().as_str() {
-        "european" => Ok(ExerciseStyle::European),
-        "american" => Ok(ExerciseStyle::American),
-        _ => Err(PyValueError::new_err(format!(
+    let normalized = s.trim();
+
+    if normalized.eq_ignore_ascii_case("european") {
+        Ok(ExerciseStyle::European)
+    } else if normalized.eq_ignore_ascii_case("american") {
+        Ok(ExerciseStyle::American)
+    } else {
+        Err(PyValueError::new_err(format!(
             "Invalid exercise style '{}'. Must be 'european' or 'american'",
             s
-        ))),
+        )))
     }
 }
 
 /// Parse tree type string to BinomialTreeType enum
 fn parse_tree_type(s: &str) -> PyResult<BinomialTreeType> {
-    match s.to_lowercase().as_str() {
-        "crr" | "cox-ross-rubinstein" => Ok(BinomialTreeType::CoxRossRubinstein),
-        "jr" | "jarrow-rudd" => Ok(BinomialTreeType::JarrowRudd),
-        _ => Err(PyValueError::new_err(format!(
+    let normalized = s.trim();
+
+    if normalized.eq_ignore_ascii_case("crr")
+        || normalized.eq_ignore_ascii_case("cox-ross-rubinstein")
+        || normalized.eq_ignore_ascii_case("cox ross rubinstein")
+        || normalized.eq_ignore_ascii_case("cox_ross_rubinstein")
+    {
+        Ok(BinomialTreeType::CoxRossRubinstein)
+    } else if normalized.eq_ignore_ascii_case("jr")
+        || normalized.eq_ignore_ascii_case("jarrow-rudd")
+        || normalized.eq_ignore_ascii_case("jarrow rudd")
+        || normalized.eq_ignore_ascii_case("jarrow_rudd")
+    {
+        Ok(BinomialTreeType::JarrowRudd)
+    } else {
+        Err(PyValueError::new_err(format!(
             "Invalid tree type '{}'. Must be 'crr', 'cox-ross-rubinstein', 'jr', or 'jarrow-rudd'",
             s
-        ))),
+        )))
     }
 }
 
@@ -1884,5 +1904,58 @@ impl PySABRModel {
             "SABR model: alpha={}, beta={}, rho={}, nu={}",
             self.inner.alpha, self.inner.beta, self.inner.rho, self.inner.nu
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_option_type_variants() {
+        assert!(matches!(
+            parse_option_type("call").unwrap(),
+            OptionType::Call
+        ));
+        assert!(matches!(
+            parse_option_type("  Call\n").unwrap(),
+            OptionType::Call
+        ));
+        assert!(matches!(parse_option_type("PUT").unwrap(), OptionType::Put));
+        assert!(matches!(
+            parse_option_type("\t put  ").unwrap(),
+            OptionType::Put
+        ));
+        assert!(parse_option_type("call option").is_err());
+    }
+
+    #[test]
+    fn test_parse_exercise_style_variants() {
+        assert!(matches!(
+            parse_exercise_style("european").unwrap(),
+            ExerciseStyle::European
+        ));
+        assert!(matches!(
+            parse_exercise_style("  AMERICAN\t").unwrap(),
+            ExerciseStyle::American
+        ));
+        assert!(parse_exercise_style("bermudan").is_err());
+    }
+
+    #[test]
+    fn test_parse_tree_type_variants() {
+        assert!(matches!(
+            parse_tree_type("crr").unwrap(),
+            BinomialTreeType::CoxRossRubinstein
+        ));
+        assert!(matches!(
+            parse_tree_type("Cox Ross Rubinstein").unwrap(),
+            BinomialTreeType::CoxRossRubinstein
+        ));
+        assert!(matches!(
+            parse_tree_type("jarrow_rudd").unwrap(),
+            BinomialTreeType::JarrowRudd
+        ));
+        assert!(parse_tree_type("trinomial").is_err());
     }
 }
