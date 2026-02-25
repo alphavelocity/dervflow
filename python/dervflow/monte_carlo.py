@@ -139,12 +139,7 @@ Examples
 (20000, 252)  # Double the paths due to antithetic variates
 """
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from dervflow._dervflow import MonteCarloEngine
-else:
-    from dervflow._dervflow import MonteCarloEngine
+from dervflow._dervflow import MonteCarloEngine
 
 __all__ = [
     "MonteCarloEngine",

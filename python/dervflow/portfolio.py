@@ -15,23 +15,16 @@ Provides portfolio construction and optimization tools:
 - Portfolio risk analytics (risk contributions, VaR, CVaR, summaries)
 """
 
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 from numpy.typing import NDArray
 
-if TYPE_CHECKING:
-    from dervflow._dervflow import BlackLittermanModel as _BlackLittermanModel
-    from dervflow._dervflow import FactorModel as _FactorModel
-    from dervflow._dervflow import InvestorViews as _InvestorViews
-    from dervflow._dervflow import PortfolioOptimizer as _PortfolioOptimizer
-    from dervflow._dervflow import RiskParityOptimizer as _RiskParityOptimizer
-else:
-    from dervflow._dervflow import BlackLittermanModel as _BlackLittermanModel
-    from dervflow._dervflow import FactorModel as _FactorModel
-    from dervflow._dervflow import InvestorViews as _InvestorViews
-    from dervflow._dervflow import PortfolioOptimizer as _PortfolioOptimizer
-    from dervflow._dervflow import RiskParityOptimizer as _RiskParityOptimizer
+from dervflow._dervflow import BlackLittermanModel as _BlackLittermanModel
+from dervflow._dervflow import FactorModel as _FactorModel
+from dervflow._dervflow import InvestorViews as _InvestorViews
+from dervflow._dervflow import PortfolioOptimizer as _PortfolioOptimizer
+from dervflow._dervflow import RiskParityOptimizer as _RiskParityOptimizer
 
 __all__ = [
     "PortfolioOptimizer",

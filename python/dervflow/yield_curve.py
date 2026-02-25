@@ -111,24 +111,13 @@ Examples
 >>> print(f"DV01: {dv01:.6f}")
 """
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from dervflow._dervflow import (
-        BondAnalytics,
-        MultiCurve,
-        SwapPeriod,
-        YieldCurve,
-        YieldCurveBuilder,
-    )
-else:
-    from dervflow._dervflow import (
-        BondAnalytics,
-        MultiCurve,
-        SwapPeriod,
-        YieldCurve,
-        YieldCurveBuilder,
-    )
+from dervflow._dervflow import (
+    BondAnalytics,
+    MultiCurve,
+    SwapPeriod,
+    YieldCurve,
+    YieldCurveBuilder,
+)
 
 __all__ = [
     "YieldCurve",

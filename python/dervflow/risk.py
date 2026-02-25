@@ -91,12 +91,7 @@ Examples
 >>> print("Risk contributions:", metrics['risk_contributions']['percentage'])
 """
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from dervflow._dervflow import GreeksCalculator, RiskMetrics
-else:
-    from dervflow._dervflow import GreeksCalculator, RiskMetrics
+from dervflow._dervflow import GreeksCalculator, RiskMetrics
 
 __all__ = [
     "GreeksCalculator",

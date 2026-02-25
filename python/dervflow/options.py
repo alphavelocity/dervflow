@@ -116,32 +116,17 @@ Examples
 >>> print(f"Barrier option price: {barrier_price:.2f}")
 """
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from dervflow._dervflow import (
-        AsianOption,
-        BarrierOption,
-        BinomialTreeModel,
-        BlackScholesModel,
-        DigitalOption,
-        LookbackOption,
-        MonteCarloOptionPricer,
-        SABRModel,
-        VolatilitySurface,
-    )
-else:
-    from dervflow._dervflow import (
-        AsianOption,
-        BarrierOption,
-        BinomialTreeModel,
-        BlackScholesModel,
-        DigitalOption,
-        LookbackOption,
-        MonteCarloOptionPricer,
-        SABRModel,
-        VolatilitySurface,
-    )
+from dervflow._dervflow import (
+    AsianOption,
+    BarrierOption,
+    BinomialTreeModel,
+    BlackScholesModel,
+    DigitalOption,
+    LookbackOption,
+    MonteCarloOptionPricer,
+    SABRModel,
+    VolatilitySurface,
+)
 
 __all__ = [
     "BlackScholesModel",

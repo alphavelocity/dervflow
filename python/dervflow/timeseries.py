@@ -46,11 +46,6 @@ Examples
 >>> print(f"P-value: {adf_result['p_value']:.4f}")
 """
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from dervflow._dervflow import TimeSeriesAnalyzer
-else:
-    from dervflow._dervflow import TimeSeriesAnalyzer
+from dervflow._dervflow import TimeSeriesAnalyzer
 
 __all__ = ["TimeSeriesAnalyzer"]
