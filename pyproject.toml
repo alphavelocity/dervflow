@@ -86,7 +86,7 @@ module-name = "dervflow._dervflow"
 features = ["python"]
 bindings = "pyo3"
 compatibility = "manylinux2014"
-strip = true
+strip = false
 universal2 = true
 
 [tool.pytest.ini_options]

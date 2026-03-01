@@ -9,7 +9,7 @@
 //! This module provides batch processing capabilities for common operations
 //! to improve performance through parallelization and reduced overhead.
 
-use crate::common::error::Result;
+use crate::common::error::{DervflowError, Result};
 use crate::common::types::OptionParams;
 use rayon::prelude::*;
 
@@ -48,6 +48,10 @@ where
 {
     if params_batch.is_empty() {
         return Ok(Vec::new());
+    }
+
+    if params_batch.len() == 1 {
+        return std::iter::once(&params_batch[0]).map(func).collect();
     }
 
     // Process in parallel
@@ -91,6 +95,10 @@ where
 {
     if params_batch.is_empty() {
         return Vec::new();
+    }
+
+    if params_batch.len() == 1 {
+        return std::iter::once(&params_batch[0]).map(func).collect();
     }
 
     // Process in parallel, collecting all results (including errors)
@@ -152,10 +160,20 @@ where
     F: Fn(&OptionParams) -> Result<T> + Sync,
     T: Send,
 {
-    let chunk_size = chunk_size.unwrap_or(1000);
-
     if params_batch.is_empty() {
         return Ok(Vec::new());
+    }
+
+    let chunk_size = chunk_size.unwrap_or(1000);
+
+    if chunk_size == 0 {
+        return Err(DervflowError::InvalidInput(
+            "chunk_size must be greater than 0".to_string(),
+        ));
+    }
+
+    if chunk_size >= params_batch.len() {
+        return params_batch.iter().map(func).collect();
     }
 
     // Process in chunks
@@ -164,8 +182,15 @@ where
         .map(|chunk| chunk.iter().map(func).collect())
         .collect();
 
-    // Flatten results
-    results.map(|chunks| chunks.into_iter().flatten().collect())
+    // Flatten results while preserving order and minimizing reallocations.
+    // Total output length equals the input length when all chunk computations succeed.
+    results.map(|chunks| {
+        let mut flattened = Vec::with_capacity(params_batch.len());
+        for mut chunk in chunks {
+            flattened.append(&mut chunk);
+        }
+        flattened
+    })
 }
 
 #[cfg(test)]
@@ -196,6 +221,15 @@ mod tests {
         let results = batch_process(&params, &black_scholes_price).unwrap();
         assert_eq!(results.len(), 1);
         assert!(results[0] > 0.0);
+    }
+
+    #[test]
+    fn test_batch_process_with_errors_single() {
+        let params = create_test_params(1);
+        let results = batch_process_with_errors(&params, &black_scholes_price);
+
+        assert_eq!(results.len(), 1);
+        assert!(results[0].is_ok());
     }
 
     #[test]
@@ -283,6 +317,57 @@ mod tests {
         let params = create_test_params(5000);
         let results = batch_process_chunked(&params, &black_scholes_price, Some(1000)).unwrap();
         assert_eq!(results.len(), 5000);
+    }
+
+    #[test]
+    fn test_batch_process_chunked_zero_chunk_size() {
+        let params = create_test_params(3);
+        let result = batch_process_chunked(&params, &black_scholes_price, Some(0));
+
+        assert!(matches!(
+            result,
+            Err(DervflowError::InvalidInput(message)) if message == "chunk_size must be greater than 0"
+        ));
+    }
+
+    #[test]
+    fn test_batch_process_chunked_empty_input_short_circuits() {
+        let params: Vec<OptionParams> = Vec::new();
+        let result = batch_process_chunked(&params, &black_scholes_price, Some(0)).unwrap();
+
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_batch_process_chunked_single_chunk_matches_direct_processing() {
+        let params = create_test_params(8);
+        let chunked =
+            batch_process_chunked(&params, &black_scholes_price, Some(params.len() * 2)).unwrap();
+        let direct: Vec<f64> = params
+            .iter()
+            .map(|p| black_scholes_price(p).unwrap())
+            .collect();
+
+        assert_eq!(chunked.len(), direct.len());
+        for i in 0..direct.len() {
+            assert!((chunked[i] - direct[i]).abs() < 1e-10);
+        }
+    }
+
+    #[test]
+    fn test_batch_process_chunked_exact_chunk_size_matches_direct_processing() {
+        let params = create_test_params(8);
+        let chunked =
+            batch_process_chunked(&params, &black_scholes_price, Some(params.len())).unwrap();
+        let direct: Vec<f64> = params
+            .iter()
+            .map(|p| black_scholes_price(p).unwrap())
+            .collect();
+
+        assert_eq!(chunked.len(), direct.len());
+        for i in 0..direct.len() {
+            assert!((chunked[i] - direct[i]).abs() < 1e-10);
+        }
     }
 
     #[test]
