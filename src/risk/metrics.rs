@@ -60,8 +60,63 @@ fn standard_deviation(data: &[f64], ddof: usize) -> f64 {
     variance(data, ddof).sqrt()
 }
 
+fn interpolate_quantile_from_partition(
+    floor_value: f64,
+    upper_partition: &[f64],
+    floor_index: usize,
+    ceil_index: usize,
+    weight: f64,
+) -> f64 {
+    if floor_index == ceil_index {
+        return floor_value;
+    }
+
+    let ceil_value = upper_partition
+        .iter()
+        .copied()
+        .min_by(f64::total_cmp)
+        .unwrap_or(floor_value);
+    floor_value * (1.0 - weight) + ceil_value * weight
+}
+
+fn min_max_from_values(values: &[f64]) -> (f64, f64) {
+    if values.is_empty() {
+        return (f64::NAN, f64::NAN);
+    }
+
+    let mut min_value = values[0];
+    let mut max_value = values[0];
+
+    for value in values.iter().copied().skip(1) {
+        if value.total_cmp(&min_value).is_lt() {
+            min_value = value;
+        }
+        if value.total_cmp(&max_value).is_gt() {
+            max_value = value;
+        }
+    }
+
+    (min_value, max_value)
+}
+
+fn quantile_position(len: usize, q: f64) -> (usize, usize, f64) {
+    if len == 0 {
+        return (0, 0, f64::NAN);
+    }
+
+    let position = (len - 1) as f64 * q;
+    let floor_index = position.floor() as usize;
+    let ceil_index = position.ceil() as usize;
+    let weight = position - floor_index as f64;
+    (floor_index, ceil_index, weight)
+}
+
+#[cfg(test)]
 fn quantile_from_sorted(sorted: &[f64], q: f64) -> f64 {
     if sorted.is_empty() {
+        return f64::NAN;
+    }
+    if !q.is_finite() {
         return f64::NAN;
     }
 
@@ -76,16 +131,132 @@ fn quantile_from_sorted(sorted: &[f64], q: f64) -> f64 {
         return *sorted.last().unwrap();
     }
 
-    let position = (sorted.len() - 1) as f64 * q;
-    let lower_index = position.floor() as usize;
-    let upper_index = position.ceil() as usize;
+    let (lower_index, upper_index, weight) = quantile_position(sorted.len(), q);
 
     if lower_index == upper_index {
         return sorted[lower_index];
     }
 
-    let weight = position - lower_index as f64;
     sorted[lower_index] * (1.0 - weight) + sorted[upper_index] * weight
+}
+
+fn quantile_from_unsorted_in_place(values: &mut [f64], q: f64) -> f64 {
+    if values.is_empty() {
+        return f64::NAN;
+    }
+    if !q.is_finite() {
+        return f64::NAN;
+    }
+
+    if values.len() == 1 {
+        return values[0];
+    }
+
+    if q <= 0.0 {
+        return values
+            .iter()
+            .copied()
+            .min_by(f64::total_cmp)
+            .unwrap_or(f64::NAN);
+    }
+    if q >= 1.0 {
+        return values
+            .iter()
+            .copied()
+            .max_by(f64::total_cmp)
+            .unwrap_or(f64::NAN);
+    }
+
+    let (lower_index, upper_index, weight) = quantile_position(values.len(), q);
+
+    let (_, lower_ref, upper_partition) =
+        values.select_nth_unstable_by(lower_index, f64::total_cmp);
+    let lower = *lower_ref;
+
+    interpolate_quantile_from_partition(lower, upper_partition, lower_index, upper_index, weight)
+}
+
+#[cfg(test)]
+fn quantile_from_unsorted(values: &[f64], q: f64) -> f64 {
+    let mut working = values.to_vec();
+    quantile_from_unsorted_in_place(&mut working, q)
+}
+
+fn quantile_pair_from_unsorted_in_place(values: &mut [f64], q_low: f64, q_high: f64) -> (f64, f64) {
+    if values.is_empty() {
+        return (f64::NAN, f64::NAN);
+    }
+
+    if !q_low.is_finite() || !q_high.is_finite() {
+        return (f64::NAN, f64::NAN);
+    }
+
+    let (ordered_low, ordered_high, swapped) = if q_low <= q_high {
+        (q_low, q_high, false)
+    } else {
+        (q_high, q_low, true)
+    };
+
+    if ordered_low == ordered_high {
+        let q = quantile_from_unsorted_in_place(values, ordered_low);
+        return (q, q);
+    }
+
+    if ordered_low <= 0.0 || ordered_high >= 1.0 {
+        let (min_value, max_value) = min_max_from_values(values);
+        let low = if ordered_low <= 0.0 {
+            min_value
+        } else {
+            quantile_from_unsorted_in_place(values, ordered_low)
+        };
+        let high = if ordered_high >= 1.0 {
+            max_value
+        } else {
+            quantile_from_unsorted_in_place(values, ordered_high)
+        };
+        return if swapped { (high, low) } else { (low, high) };
+    }
+
+    let n = values.len();
+    let (low_index, low_upper_index, low_weight) = quantile_position(n, ordered_low);
+    let (high_index, high_upper_index, high_weight) = quantile_position(n, ordered_high);
+
+    let (_, low_ref, low_upper_partition) =
+        values.select_nth_unstable_by(low_index, f64::total_cmp);
+    let low_floor = *low_ref;
+    let low = interpolate_quantile_from_partition(
+        low_floor,
+        low_upper_partition,
+        low_index,
+        low_upper_index,
+        low_weight,
+    );
+
+    if high_index == low_index {
+        let high = interpolate_quantile_from_partition(
+            low_floor,
+            low_upper_partition,
+            high_index,
+            high_upper_index,
+            high_weight,
+        );
+        return if swapped { (high, low) } else { (low, high) };
+    }
+
+    let right_partition = &mut values[low_index..];
+    let relative_high_index = high_index - low_index;
+    let (_, high_ref, high_upper_partition) =
+        right_partition.select_nth_unstable_by(relative_high_index, f64::total_cmp);
+    let high_floor = *high_ref;
+    let high = interpolate_quantile_from_partition(
+        high_floor,
+        high_upper_partition,
+        high_index,
+        high_upper_index,
+        high_weight,
+    );
+
+    if swapped { (high, low) } else { (low, high) }
 }
 
 fn validate_drawdown_price(value: f64) -> Result<()> {
@@ -511,10 +682,9 @@ pub fn tail_ratio(returns: &[f64], percentile: f64) -> Result<f64> {
         ));
     }
 
-    let mut sorted = returns.to_vec();
-    sorted.sort_unstable_by(f64::total_cmp);
-    let lower = quantile_from_sorted(&sorted, 1.0 - percentile);
-    let upper = quantile_from_sorted(&sorted, percentile);
+    let mut working = returns.to_vec();
+    let (lower, upper) =
+        quantile_pair_from_unsorted_in_place(&mut working, 1.0 - percentile, percentile);
 
     if !lower.is_finite() || !upper.is_finite() {
         return Err(DervflowError::NumericalError(
@@ -903,5 +1073,266 @@ mod tests {
 
         let calmar = calmar_ratio(0.12, max_dd.abs()).unwrap();
         assert!(calmar.is_finite());
+    }
+
+    #[test]
+    fn test_tail_ratio_median_percentile_matches_reference() {
+        let values = vec![-0.2, -0.1, -0.04, 0.02, 0.06, 0.11, 0.3];
+        let percentile = 0.5;
+
+        let mut sorted = values.clone();
+        sorted.sort_unstable_by(f64::total_cmp);
+        let lower = quantile_from_sorted(&sorted, 1.0 - percentile);
+        let upper = quantile_from_sorted(&sorted, percentile);
+        let expected = if lower >= 0.0 {
+            f64::INFINITY
+        } else if upper <= 0.0 {
+            0.0
+        } else {
+            upper / lower.abs()
+        };
+
+        let actual = tail_ratio(&values, percentile).unwrap();
+        assert!(
+            (actual - expected).abs() < 1e-12 || (actual.is_infinite() && expected.is_infinite())
+        );
+    }
+
+    #[test]
+    fn test_tail_ratio_reuses_single_buffer_and_matches_sorted_reference() {
+        let values = vec![
+            -0.12, -0.12, -0.08, -0.04, -0.02, 0.0, 0.01, 0.01, 0.07, 0.09, 0.11, 0.2,
+        ];
+        let percentile = 0.9;
+
+        let mut sorted = values.clone();
+        sorted.sort_unstable_by(f64::total_cmp);
+        let lower = quantile_from_sorted(&sorted, 1.0 - percentile);
+        let upper = quantile_from_sorted(&sorted, percentile);
+        let expected = upper / lower.abs();
+
+        let actual = tail_ratio(&values, percentile).unwrap();
+        assert!((actual - expected).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_quantile_pair_matches_individual_quantiles() {
+        let values = vec![0.1, -0.3, 0.25, 0.05, 1.0, -2.0, 0.0, 0.5, -0.1, 0.2];
+        let q_low = 0.1;
+        let q_high = 0.9;
+
+        let mut pair_working = values.clone();
+        let (low_pair, high_pair) =
+            quantile_pair_from_unsorted_in_place(&mut pair_working, q_low, q_high);
+
+        let mut low_working = values.clone();
+        let low_single = quantile_from_unsorted_in_place(&mut low_working, q_low);
+        let mut high_working = values.clone();
+        let high_single = quantile_from_unsorted_in_place(&mut high_working, q_high);
+
+        assert!((low_pair - low_single).abs() < 1e-12);
+        assert!((high_pair - high_single).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_quantile_pair_swapped_same_floor_index_preserves_argument_order() {
+        let values = vec![-2.0, -1.0, -0.2, 0.0, 0.3, 1.1, 2.4, 3.0, 3.2, 4.0];
+        let q1 = 0.56;
+        let q2 = 0.52;
+
+        let mut working = values.clone();
+        let (v1, v2) = quantile_pair_from_unsorted_in_place(&mut working, q1, q2);
+
+        let mut w1 = values.clone();
+        let expected_v1 = quantile_from_unsorted_in_place(&mut w1, q1);
+        let mut w2 = values.clone();
+        let expected_v2 = quantile_from_unsorted_in_place(&mut w2, q2);
+
+        assert!((v1 - expected_v1).abs() < 1e-12);
+        assert!((v2 - expected_v2).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_quantile_pair_handles_descending_quantile_requests() {
+        let values = vec![0.1, -0.3, 0.25, 0.05, 1.0, -2.0, 0.0, 0.5, -0.1, 0.2];
+        let q_low = 0.9;
+        let q_high = 0.1;
+
+        let mut working = values.clone();
+        let (low, high) = quantile_pair_from_unsorted_in_place(&mut working, q_low, q_high);
+
+        let mut low_working = values.clone();
+        let expected_low = quantile_from_unsorted_in_place(&mut low_working, q_low);
+        let mut high_working = values.clone();
+        let expected_high = quantile_from_unsorted_in_place(&mut high_working, q_high);
+
+        assert!((low - expected_low).abs() < 1e-12);
+        assert!((high - expected_high).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_quantile_pair_treats_negative_and_positive_zero_quantiles_equally() {
+        let values = vec![-1.0, 0.0, 1.0, 2.0];
+        let mut working = values.clone();
+        let (q1, q2) = quantile_pair_from_unsorted_in_place(&mut working, -0.0, 0.0);
+        assert_eq!(q1, q2);
+        assert_eq!(q1, -1.0);
+    }
+
+    #[test]
+    fn test_quantile_position_handles_empty_length() {
+        let (floor_index, ceil_index, weight) = quantile_position(0, 0.5);
+        assert_eq!(floor_index, 0);
+        assert_eq!(ceil_index, 0);
+        assert!(weight.is_nan());
+    }
+
+    #[test]
+    fn test_min_max_from_values_handles_empty_input() {
+        let (min_value, max_value) = min_max_from_values(&[]);
+        assert!(min_value.is_nan());
+        assert!(max_value.is_nan());
+    }
+
+    #[test]
+    fn test_quantile_pair_handles_empty_input() {
+        let mut values: Vec<f64> = Vec::new();
+        let (low, high) = quantile_pair_from_unsorted_in_place(&mut values, 0.1, 0.9);
+        assert!(low.is_nan());
+        assert!(high.is_nan());
+    }
+
+    #[test]
+    fn test_quantile_pair_handles_out_of_range_quantiles() {
+        let values = vec![0.1, -0.3, 0.25, 0.05, 1.0, -2.0, 0.0, 0.5, -0.1, 0.2];
+
+        let mut working = values.clone();
+        let (low, high) = quantile_pair_from_unsorted_in_place(&mut working, -0.25, 1.25);
+
+        let mut low_working = values.clone();
+        let expected_low = quantile_from_unsorted_in_place(&mut low_working, -0.25);
+        let mut high_working = values.clone();
+        let expected_high = quantile_from_unsorted_in_place(&mut high_working, 1.25);
+
+        assert_eq!(low, expected_low);
+        assert_eq!(high, expected_high);
+    }
+
+    #[test]
+    fn test_quantile_pair_handles_extreme_boundary_quantiles_with_swapping() {
+        let values = vec![4.0, -1.5, 0.0, 2.2, -3.0, 0.7];
+
+        let mut working = values.clone();
+        let (q1, q2) = quantile_pair_from_unsorted_in_place(&mut working, 1.25, -0.25);
+
+        let mut sorted = values.clone();
+        sorted.sort_unstable_by(f64::total_cmp);
+        assert_eq!(q1, *sorted.last().unwrap());
+        assert_eq!(q2, sorted[0]);
+    }
+
+    #[test]
+    fn test_quantile_pair_exact_boundary_quantiles_preserve_order() {
+        let values = vec![3.5, -1.2, 0.0, 1.1, -4.0, 2.8];
+
+        let mut working = values.clone();
+        let (first, second) = quantile_pair_from_unsorted_in_place(&mut working, 1.0, 0.0);
+
+        let mut sorted = values.clone();
+        sorted.sort_unstable_by(f64::total_cmp);
+        assert_eq!(first, *sorted.last().unwrap());
+        assert_eq!(second, sorted[0]);
+    }
+
+    #[test]
+    fn test_single_quantile_handles_non_finite_quantiles() {
+        let values = vec![-1.0, 0.0, 1.0];
+
+        let mut working = values.clone();
+        let nan_q = quantile_from_unsorted_in_place(&mut working, f64::NAN);
+        assert!(nan_q.is_nan());
+
+        let mut working = values.clone();
+        let pos_inf_q = quantile_from_unsorted_in_place(&mut working, f64::INFINITY);
+        assert!(pos_inf_q.is_nan());
+
+        let mut working = values.clone();
+        let neg_inf_q = quantile_from_unsorted_in_place(&mut working, f64::NEG_INFINITY);
+        assert!(neg_inf_q.is_nan());
+
+        let mut sorted = values.clone();
+        sorted.sort_unstable_by(f64::total_cmp);
+        let nan_ref = quantile_from_sorted(&sorted, f64::NAN);
+        assert!(nan_ref.is_nan());
+        let pos_inf_ref = quantile_from_sorted(&sorted, f64::INFINITY);
+        assert!(pos_inf_ref.is_nan());
+        let neg_inf_ref = quantile_from_sorted(&sorted, f64::NEG_INFINITY);
+        assert!(neg_inf_ref.is_nan());
+    }
+
+    #[test]
+    fn test_quantile_pair_handles_non_finite_quantiles() {
+        let mut values = vec![0.1, -0.3, 0.25];
+        let (low, high) = quantile_pair_from_unsorted_in_place(&mut values, f64::NAN, 0.9);
+        assert!(low.is_nan());
+        assert!(high.is_nan());
+
+        let mut values = vec![0.1, -0.3, 0.25];
+        let (low, high) = quantile_pair_from_unsorted_in_place(&mut values, f64::INFINITY, 0.9);
+        assert!(low.is_nan());
+        assert!(high.is_nan());
+
+        let mut values = vec![0.1, -0.3, 0.25];
+        let (low, high) = quantile_pair_from_unsorted_in_place(&mut values, 0.1, f64::NEG_INFINITY);
+        assert!(low.is_nan());
+        assert!(high.is_nan());
+    }
+
+    #[test]
+    fn test_quantile_pair_matches_sorted_reference_grid() {
+        let values = vec![
+            -3.0, -1.0, -1.0, -0.5, -0.1, 0.0, 0.0, 0.05, 0.25, 0.6, 1.4, 2.7,
+        ];
+        let quantiles = [0.01, 0.1, 0.25, 0.49, 0.5, 0.51, 0.75, 0.9, 0.99];
+
+        let mut sorted = values.clone();
+        sorted.sort_unstable_by(f64::total_cmp);
+
+        for &q1 in &quantiles {
+            for &q2 in &quantiles {
+                let mut working = values.clone();
+                let (pair_q1, pair_q2) = quantile_pair_from_unsorted_in_place(&mut working, q1, q2);
+
+                let expected_q1 = quantile_from_sorted(&sorted, q1);
+                let expected_q2 = quantile_from_sorted(&sorted, q2);
+
+                assert!(
+                    (pair_q1 - expected_q1).abs() < 1e-12,
+                    "pair q1 mismatch for q1={q1}, q2={q2}"
+                );
+                assert!(
+                    (pair_q2 - expected_q2).abs() < 1e-12,
+                    "pair q2 mismatch for q1={q1}, q2={q2}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_quantile_unsorted_matches_sorted() {
+        let values = vec![0.1, -0.3, 0.25, 0.05, 1.0, -2.0, 0.0, 0.5, -0.1, 0.2];
+        let quantiles = [0.0, 0.1, 0.25, 0.5, 0.75, 0.9, 1.0];
+
+        let mut sorted = values.clone();
+        sorted.sort_unstable_by(f64::total_cmp);
+
+        for q in quantiles {
+            let expected = quantile_from_sorted(&sorted, q);
+            let actual = quantile_from_unsorted(&values, q);
+            assert!(
+                (actual - expected).abs() < 1e-12,
+                "quantile mismatch for q={q}"
+            );
+        }
     }
 }
