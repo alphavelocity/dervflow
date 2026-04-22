@@ -292,41 +292,129 @@ pub fn z_scores(data: &[f64]) -> Result<Vec<f64>> {
 pub fn covariance(x: &[f64], y: &[f64], unbiased: bool) -> Result<f64> {
     validate_non_empty(x, "covariance")?;
     validate_same_length(x, y, "covariance")?;
+
+    let n = x.len();
+    if unbiased && n < 2 {
+        return Err(DervflowError::InvalidInput(
+            "At least two observations are required for unbiased covariance".to_string(),
+        ));
+    }
+
     validate_finite(x, "covariance")?;
     validate_finite(y, "covariance")?;
 
-    let mean_x = mean(x)?;
-    let mean_y = mean(y)?;
-    let mut cov = 0.0;
-    for (&xi, &yi) in x.iter().zip(y.iter()) {
-        cov += (xi - mean_x) * (yi - mean_y);
+    // Online covariance accumulation (Welford-style update) to reduce extra
+    // passes and improve numerical stability for large-magnitude inputs.
+    let mut mean_x = 0.0;
+    let mut mean_y = 0.0;
+    let mut co_moment = 0.0;
+
+    for (index, (&xi, &yi)) in x.iter().zip(y.iter()).enumerate() {
+        let n = index as f64 + 1.0;
+        let inv_n = 1.0 / n;
+        let delta_x = xi - mean_x;
+        let delta_y = yi - mean_y;
+
+        mean_x += delta_x * inv_n;
+        mean_y += delta_y * inv_n;
+
+        // Equivalent to `delta_x * (yi - mean_y)` after the mean update,
+        // while reusing `delta_y` and the reciprocal computed for means.
+        let scale = 1.0 - inv_n;
+        co_moment += scale * delta_x * delta_y;
     }
 
-    let n = x.len();
-    if unbiased {
-        if n < 2 {
-            return Err(DervflowError::InvalidInput(
-                "At least two observations are required for unbiased covariance".to_string(),
-            ));
-        }
-        Ok(cov / (n as f64 - 1.0))
-    } else {
-        Ok(cov / n as f64)
+    if !co_moment.is_finite() {
+        return Err(DervflowError::NumericalError(
+            "Covariance accumulation overflowed or became non-finite".to_string(),
+        ));
     }
+
+    let covariance = if unbiased {
+        co_moment / (n as f64 - 1.0)
+    } else {
+        co_moment / n as f64
+    };
+
+    if !covariance.is_finite() {
+        return Err(DervflowError::NumericalError(
+            "Covariance computation overflowed or became non-finite".to_string(),
+        ));
+    }
+
+    Ok(covariance)
 }
 
 pub fn correlation(x: &[f64], y: &[f64]) -> Result<f64> {
-    let cov = covariance(x, y, false)?;
-    let std_x = standard_deviation(x, false)?;
-    let std_y = standard_deviation(y, false)?;
+    validate_non_empty(x, "correlation")?;
+    validate_same_length(x, y, "correlation")?;
 
-    if std_x.abs() < f64::EPSILON || std_y.abs() < f64::EPSILON {
+    if x.len() < 2 {
+        return Err(DervflowError::InvalidInput(
+            "At least two observations are required for correlation".to_string(),
+        ));
+    }
+
+    validate_finite(x, "correlation")?;
+    validate_finite(y, "correlation")?;
+
+    // Single-pass, numerically stable updates for means, variances, and
+    // covariance avoid redundant traversals over the same slices.
+    let mut mean_x = 0.0;
+    let mut mean_y = 0.0;
+    let mut m2_x = 0.0;
+    let mut m2_y = 0.0;
+    let mut co_moment = 0.0;
+
+    for (index, (&xi, &yi)) in x.iter().zip(y.iter()).enumerate() {
+        let n = index as f64 + 1.0;
+        let inv_n = 1.0 / n;
+        let delta_x = xi - mean_x;
+        let delta_y = yi - mean_y;
+
+        mean_x += delta_x * inv_n;
+        mean_y += delta_y * inv_n;
+
+        let scale = 1.0 - inv_n;
+        m2_x += scale * delta_x * delta_x;
+        m2_y += scale * delta_y * delta_y;
+        co_moment += scale * delta_x * delta_y;
+    }
+
+    if !m2_x.is_finite() || !m2_y.is_finite() || !co_moment.is_finite() {
+        return Err(DervflowError::NumericalError(
+            "Correlation accumulation overflowed or became non-finite".to_string(),
+        ));
+    }
+
+    if m2_x <= 0.0 || m2_y <= 0.0 {
         return Err(DervflowError::InvalidInput(
             "Cannot compute correlation when variance is zero".to_string(),
         ));
     }
 
-    Ok(cov / (std_x * std_y))
+    // Divide in two stages to avoid unnecessary overflow in `sqrt(m2_x * m2_y)`.
+    let std_x = m2_x.sqrt();
+    let std_y = m2_y.sqrt();
+    let corr = (co_moment / std_x) / std_y;
+
+    if !corr.is_finite() {
+        return Err(DervflowError::NumericalError(
+            "Correlation computation overflowed or became non-finite".to_string(),
+        ));
+    }
+
+    // Numerical round-off can move correlation slightly outside [-1, 1].
+    const CORR_ROUNDING_TOLERANCE: f64 = 1e-12;
+    let abs_corr = corr.abs();
+
+    if abs_corr <= 1.0 + CORR_ROUNDING_TOLERANCE {
+        Ok(corr.clamp(-1.0, 1.0))
+    } else {
+        Err(DervflowError::NumericalError(
+            "Correlation result fell outside the valid range [-1, 1]".to_string(),
+        ))
+    }
 }
 
 pub fn skewness(data: &[f64]) -> Result<f64> {
@@ -601,5 +689,99 @@ mod tests {
 
         let z = z_scores(&x).unwrap();
         assert_abs_diff_eq!(z.iter().copied().sum::<f64>(), 0.0, epsilon = 1e-12);
+
+        let constant = [5.0, 5.0, 5.0, 5.0];
+        let err = correlation(&constant, &y).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("Cannot compute correlation when variance is zero")
+        );
+
+        let single_x = [1.0];
+        let single_y = [2.0];
+        let err = correlation(&single_x, &single_y).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("At least two observations are required for correlation")
+        );
+    }
+
+    #[test]
+    fn test_covariance_large_magnitude_stability() {
+        let x = [1.0e12 + 1.0, 1.0e12 + 2.0, 1.0e12 + 3.0, 1.0e12 + 4.0];
+        let y = [2.0e12 + 2.0, 2.0e12 + 4.0, 2.0e12 + 6.0, 2.0e12 + 8.0];
+
+        // y = 2x + c => cov(x, y) = 2 * var(x), corr(x, y) = 1.
+        assert_abs_diff_eq!(covariance(&x, &y, false).unwrap(), 2.5, epsilon = 1e-10);
+        assert_abs_diff_eq!(
+            covariance(&x, &y, true).unwrap(),
+            10.0 / 3.0,
+            epsilon = 1e-10
+        );
+        assert_abs_diff_eq!(correlation(&x, &y).unwrap(), 1.0, epsilon = 1e-12);
+    }
+
+    #[test]
+    fn test_correlation_with_tiny_nonzero_variance_is_finite() {
+        let x = [1.0, 1.0 + 1.0e-9, 1.0 + 2.0e-9, 1.0 + 3.0e-9];
+        let y = [2.0, 2.0 + 1.0e-9, 2.0 + 2.0e-9, 2.0 + 3.0e-9];
+
+        let corr = correlation(&x, &y).unwrap();
+        assert!(corr.is_finite());
+        assert_abs_diff_eq!(corr, 1.0, epsilon = 1e-10);
+    }
+
+    #[test]
+    fn test_correlation_large_scale_avoids_denominator_overflow() {
+        let x = [1.0e150, 2.0e150, 3.0e150, 4.0e150];
+        let y = [2.0e150, 4.0e150, 6.0e150, 8.0e150];
+
+        let corr = correlation(&x, &y).unwrap();
+        assert_abs_diff_eq!(corr, 1.0, epsilon = 1e-12);
+    }
+
+    #[test]
+    fn test_correlation_reports_numerical_error_on_overflowing_moments() {
+        let x = [1.0e308, -1.0e308, 1.0e308, -1.0e308];
+        let y = x;
+
+        let err = correlation(&x, &y).unwrap_err();
+        assert!(matches!(err, DervflowError::NumericalError(_)));
+    }
+
+    #[test]
+    fn test_correlation_bounds_and_symmetry() {
+        let x = [3.0, -1.0, 4.0, -2.0, 5.0, -3.0];
+        let y = [-7.0, 2.0, -6.0, 1.0, -5.0, 0.0];
+
+        let corr_xy = correlation(&x, &y).unwrap();
+        let corr_yx = correlation(&y, &x).unwrap();
+
+        assert!(corr_xy >= -1.0 && corr_xy <= 1.0);
+        assert_abs_diff_eq!(corr_xy, corr_yx, epsilon = 1e-12);
+
+        let anti = correlation(&x, &x.map(|v| -v)).unwrap();
+        assert_abs_diff_eq!(anti, -1.0, epsilon = 1e-12);
+    }
+
+    #[test]
+    fn test_covariance_unbiased_requires_two_observations() {
+        let x = [42.0];
+        let y = [84.0];
+
+        let err = covariance(&x, &y, true).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("At least two observations are required for unbiased covariance")
+        );
+    }
+
+    #[test]
+    fn test_covariance_reports_numerical_error_on_overflowing_moments() {
+        let x = [1.0e308, -1.0e308, 1.0e308, -1.0e308];
+        let y = x;
+
+        let err = covariance(&x, &y, false).unwrap_err();
+        assert!(matches!(err, DervflowError::NumericalError(_)));
     }
 }
