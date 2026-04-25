@@ -18,6 +18,53 @@ fn stable_lerp(lower: f64, upper: f64, weight: f64) -> f64 {
     lower * (1.0 - weight) + upper * weight
 }
 
+#[derive(Clone, Copy, Debug)]
+struct BivariateMoments {
+    m2_x: f64,
+    m2_y: f64,
+    co_moment: f64,
+}
+
+#[inline]
+fn accumulate_bivariate_moments(
+    x: &[f64],
+    y: &[f64],
+    metric_name: &str,
+) -> Result<BivariateMoments> {
+    let mut mean_x = 0.0;
+    let mut mean_y = 0.0;
+    let mut m2_x = 0.0;
+    let mut m2_y = 0.0;
+    let mut co_moment = 0.0;
+
+    for (index, (&xi, &yi)) in x.iter().zip(y.iter()).enumerate() {
+        let n = index as f64 + 1.0;
+        let inv_n = 1.0 / n;
+        let delta_x = xi - mean_x;
+        let delta_y = yi - mean_y;
+
+        mean_x += delta_x * inv_n;
+        mean_y += delta_y * inv_n;
+
+        let scale = 1.0 - inv_n;
+        m2_x += scale * delta_x * delta_x;
+        m2_y += scale * delta_y * delta_y;
+        co_moment += scale * delta_x * delta_y;
+    }
+
+    if !m2_x.is_finite() || !m2_y.is_finite() || !co_moment.is_finite() {
+        return Err(DervflowError::NumericalError(format!(
+            "{metric_name} accumulation overflowed or became non-finite"
+        )));
+    }
+
+    Ok(BivariateMoments {
+        m2_x,
+        m2_y,
+        co_moment,
+    })
+}
+
 pub fn mean(data: &[f64]) -> Result<f64> {
     validate_non_empty(data, "mean")?;
     validate_finite(data, "mean")?;
@@ -305,30 +352,7 @@ pub fn covariance(x: &[f64], y: &[f64], unbiased: bool) -> Result<f64> {
 
     // Online covariance accumulation (Welford-style update) to reduce extra
     // passes and improve numerical stability for large-magnitude inputs.
-    let mut mean_x = 0.0;
-    let mut mean_y = 0.0;
-    let mut co_moment = 0.0;
-
-    for (index, (&xi, &yi)) in x.iter().zip(y.iter()).enumerate() {
-        let n = index as f64 + 1.0;
-        let inv_n = 1.0 / n;
-        let delta_x = xi - mean_x;
-        let delta_y = yi - mean_y;
-
-        mean_x += delta_x * inv_n;
-        mean_y += delta_y * inv_n;
-
-        // Equivalent to `delta_x * (yi - mean_y)` after the mean update,
-        // while reusing `delta_y` and the reciprocal computed for means.
-        let scale = 1.0 - inv_n;
-        co_moment += scale * delta_x * delta_y;
-    }
-
-    if !co_moment.is_finite() {
-        return Err(DervflowError::NumericalError(
-            "Covariance accumulation overflowed or became non-finite".to_string(),
-        ));
-    }
+    let co_moment = accumulate_bivariate_moments(x, y, "Covariance")?.co_moment;
 
     let covariance = if unbiased {
         co_moment / (n as f64 - 1.0)
@@ -360,32 +384,10 @@ pub fn correlation(x: &[f64], y: &[f64]) -> Result<f64> {
 
     // Single-pass, numerically stable updates for means, variances, and
     // covariance avoid redundant traversals over the same slices.
-    let mut mean_x = 0.0;
-    let mut mean_y = 0.0;
-    let mut m2_x = 0.0;
-    let mut m2_y = 0.0;
-    let mut co_moment = 0.0;
-
-    for (index, (&xi, &yi)) in x.iter().zip(y.iter()).enumerate() {
-        let n = index as f64 + 1.0;
-        let inv_n = 1.0 / n;
-        let delta_x = xi - mean_x;
-        let delta_y = yi - mean_y;
-
-        mean_x += delta_x * inv_n;
-        mean_y += delta_y * inv_n;
-
-        let scale = 1.0 - inv_n;
-        m2_x += scale * delta_x * delta_x;
-        m2_y += scale * delta_y * delta_y;
-        co_moment += scale * delta_x * delta_y;
-    }
-
-    if !m2_x.is_finite() || !m2_y.is_finite() || !co_moment.is_finite() {
-        return Err(DervflowError::NumericalError(
-            "Correlation accumulation overflowed or became non-finite".to_string(),
-        ));
-    }
+    let moments = accumulate_bivariate_moments(x, y, "Correlation")?;
+    let m2_x = moments.m2_x;
+    let m2_y = moments.m2_y;
+    let co_moment = moments.co_moment;
 
     if m2_x <= 0.0 || m2_y <= 0.0 {
         return Err(DervflowError::InvalidInput(
@@ -757,7 +759,7 @@ mod tests {
         let corr_xy = correlation(&x, &y).unwrap();
         let corr_yx = correlation(&y, &x).unwrap();
 
-        assert!(corr_xy >= -1.0 && corr_xy <= 1.0);
+        assert!((-1.0..=1.0).contains(&corr_xy));
         assert_abs_diff_eq!(corr_xy, corr_yx, epsilon = 1e-12);
 
         let anti = correlation(&x, &x.map(|v| -v)).unwrap();
